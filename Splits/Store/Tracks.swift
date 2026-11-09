@@ -105,7 +105,7 @@ struct TrackAnalysis {
     static let pauseGap: TimeInterval = 15
 
     /// `splitLength`: 1000 m, or 1609.344 m for miles.
-    init(_ track: Track, splitLength: Double = 1000, maxSamples: Int = 700) {
+    init(_ track: Track, splitLength: Double = 1000, maxSamples: Int = 320) {
         let points = track.points
         let start = points.first?.time ?? Date()
         // Timer time: the watch stops recording while paused (lights, a coffee), so a long gap between two
@@ -116,13 +116,21 @@ struct TrackAnalysis {
             active[i] = active[i - 1] + (gap > Self.pauseGap ? 0 : max(gap, 0))
         }
 
-        // Charts: an even spread of at most `maxSamples` points.
+        // Charts: at most `maxSamples` points (more only costs drawing time). Each one averages heart rate,
+        // speed, cadence and power over its stretch, which also smooths out GPS jitter.
         let step = max(points.count / maxSamples, 1)
         var samples: [Sample] = []
-        for (i, p) in points.enumerated() where i % step == 0 {
-            samples.append(Sample(id: i, km: (p.distance ?? 0) / 1000, time: p.time.timeIntervalSince(start),
-                                  heartRate: p.heartRate, speed: p.speed, altitude: p.altitude, power: p.power,
-                                  cadence: p.cadence, coordinate: p.coordinate))
+        func mean(_ values: [Double?]) -> Double? {
+            let v = values.compactMap { $0 }
+            return v.isEmpty ? nil : v.reduce(0, +) / Double(v.count)
+        }
+        for i in stride(from: 0, to: points.count, by: step) {
+            let p = points[i]
+            let bucket = points[i..<min(i + step, points.count)]
+            samples.append(Sample(id: i, km: (p.distance ?? 0) / 1000, time: active[i],
+                                  heartRate: mean(bucket.map(\.heartRate)), speed: mean(bucket.map(\.speed)),
+                                  altitude: p.altitude, power: mean(bucket.map(\.power)),
+                                  cadence: mean(bucket.map(\.cadence)), coordinate: p.coordinate))
         }
         self.samples = samples
 

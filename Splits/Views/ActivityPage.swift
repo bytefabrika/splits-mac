@@ -29,10 +29,11 @@ struct ActivityPage: View {
 
                 if let analysis {
                     if !analysis.route.isEmpty && !Sport.isIndoor(activity.typeKey) {
-                        RouteMap(analysis: analysis, sport: sport, selectedKm: selectedKm.map { format.imperial ? $0 * 1.609344 : $0 }, interactive: false)
+                        // A still picture of the map: a live map in a scrolling page is slow and catches the scroll wheel.
+                        RouteSnapshot(analysis: analysis, sport: sport, selectedKm: selectedKm.map { format.imperial ? $0 * 1.609344 : $0 })
                             .frame(height: 380)
                             .clipShape(RoundedRectangle(cornerRadius: 18))
-                            .allowsHitTesting(false)  // scrolling the page shouldn't zoom the map
+                            .onTapGesture(count: 2) { exploringMap = true }
                             .overlay(alignment: .topTrailing) {
                                 Button { exploringMap = true } label: {
                                     Label("Explore map", systemImage: "arrow.up.left.and.arrow.down.right")
@@ -384,7 +385,7 @@ struct TrackCharts: View {
     private var maxX: Double { max((analysis.samples.last?.km ?? 1) * toUnit, 0.01) }
 
     var body: some View {
-        let samples = smoothed
+        let samples = analysis.samples
         let selected = selectedKm.flatMap { x in samples.min { abs($0.km * toUnit - x) < abs($1.km * toUnit - x) } }
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
@@ -400,17 +401,6 @@ struct TrackCharts: View {
         }
         .padding(18)
         .background(.background.secondary, in: RoundedRectangle(cornerRadius: 18))
-    }
-
-    /// Speed averaged over a few samples, so GPS jitter doesn't draw spikes.
-    private var smoothed: [TrackAnalysis.Sample] {
-        let s = analysis.samples
-        return s.indices.map { i in
-            let window = s[max(0, i - 3)...min(s.count - 1, i + 3)].compactMap(\.speed)
-            let speed = window.isEmpty ? nil : window.reduce(0, +) / Double(window.count)
-            return TrackAnalysis.Sample(id: s[i].id, km: s[i].km, time: s[i].time, heartRate: s[i].heartRate, speed: speed,
-                                        altitude: s[i].altitude, power: s[i].power, cadence: s[i].cadence, coordinate: s[i].coordinate)
-        }
     }
 
     @ViewBuilder
@@ -688,13 +678,11 @@ struct VersusUsual: View {
     let activity: Activity
     @Environment(\.modelContext) private var context
     @Environment(\.format) private var format
+    /// Fetched once when the page opens, not on every redraw.
+    @State private var previous: [Activity] = []
 
     var body: some View {
-        let before = activity.start
-        var query = FetchDescriptor<Activity>(predicate: #Predicate { $0.start < before }, sortBy: [SortDescriptor(\.start, order: .reverse)])
-        query.fetchLimit = 80
-        let previous = Array(((try? context.fetch(query)) ?? []).filter { $0.sport == activity.sport }.prefix(10))
-        return Group {
+        Group {
             if previous.count >= 3 {
                 VStack(alignment: .leading, spacing: 10) {
                     Label("Versus your usual", systemImage: "arrow.left.arrow.right").font(.headline)
@@ -724,6 +712,13 @@ struct VersusUsual: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(.background.secondary, in: RoundedRectangle(cornerRadius: 16))
             }
+        }
+        .task(id: activity.garminId) {
+            let before = activity.start
+            var query = FetchDescriptor<Activity>(predicate: #Predicate { $0.start < before },
+                                                  sortBy: [SortDescriptor(\.start, order: .reverse)])
+            query.fetchLimit = 80
+            previous = Array(((try? context.fetch(query)) ?? []).filter { $0.sport == activity.sport }.prefix(10))
         }
     }
 

@@ -1,3 +1,4 @@
+import MapKit
 import SwiftData
 import SwiftUI
 
@@ -14,6 +15,8 @@ struct SplitsApp: App {
         if CommandLine.arguments.contains("--fit-test") { DebugSync.fit() }
         // `Splits --coach-test` writes a take on the newest activity in the real store and prints it. Saves nothing.
         if CommandLine.arguments.contains("--coach-test") { DebugSync.coach(container: container) }
+        // `Splits --map-test < activity.zip > map.png`: the still map with the route drawn on, to check they line up.
+        if CommandLine.arguments.contains("--map-test") { DebugSync.map() }
         #endif
     }
 
@@ -81,6 +84,40 @@ enum DebugSync {
             } catch {
                 print("failed: \(error)")
             }
+            exit(0)
+        }
+    }
+
+    static func map() {
+        let input = FileHandle.standardInput.readDataToEndOfFile()
+        Task { @MainActor in
+            let fitData = (try? Zip.entries(input).first { $0.name.lowercased().hasSuffix(".fit") }?.data) ?? input
+            guard let track = try? FIT.decode(fitData) else { FileHandle.standardError.write(Data("bad file\n".utf8)); exit(1) }
+            let analysis = TrackAnalysis(track)
+            let size = CGSize(width: 900, height: 380)
+            guard let rect = RouteSnapshot.fittedRect(analysis.route, size: size) else { exit(1) }
+            let options = MKMapSnapshotter.Options()
+            options.mapRect = rect
+            options.size = size
+            options.pointOfInterestFilter = .excludingAll
+            let shot = try? await MKMapSnapshotter(options: options).start()
+            let image = NSImage(size: size)
+            image.lockFocus()
+            shot?.image.draw(in: NSRect(origin: .zero, size: size))
+            let path = NSBezierPath()
+            for (i, c) in analysis.route.enumerated() {
+                let p = MKMapPoint(c)
+                // Same projection as RouteSnapshot; AppKit's y goes up, so flip it here.
+                let point = NSPoint(x: (p.x - rect.minX) / rect.width * size.width,
+                                    y: size.height - (p.y - rect.minY) / rect.height * size.height)
+                if i == 0 { path.move(to: point) } else { path.line(to: point) }
+            }
+            NSColor.systemRed.setStroke()
+            path.lineWidth = 3
+            path.stroke()
+            image.unlockFocus()
+            let png = NSBitmapImageRep(data: image.tiffRepresentation!)!.representation(using: .png, properties: [:])!
+            FileHandle.standardOutput.write(png)
             exit(0)
         }
     }
