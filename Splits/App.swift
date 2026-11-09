@@ -198,7 +198,7 @@ enum DebugSync {
         Task { @MainActor in
             do {
                 var last = ""
-                try await Coach.write(facts: facts, instructions: Coach.dailyInstructions, temperature: 0.3) { last = $0 }
+                try await Coach.write(facts: facts, instructions: Coach.dailyInstructions, temperature: 0.4) { last = $0 }
                 print(last)
             } catch { print("Coach: \(error) – \(Coach.status)") }
             exit(0)

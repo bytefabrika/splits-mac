@@ -283,7 +283,8 @@ struct ReportCard: View {
         _status = State(initialValue: Coach.status)
         self.days = days
         self.activities = activities
-        let key = kind == .daily ? "daily" : "weekly"
+        // "dailyBrief" rather than "daily": a new key, so a briefing in the old tone is written again.
+        let key = kind == .daily ? "dailyBrief" : "weekly"
         _savedDate = AppStorage(wrappedValue: "", "\(key)ReportDate")
         _savedText = AppStorage(wrappedValue: "", "\(key)ReportText")
     }
@@ -359,7 +360,7 @@ struct ReportCard: View {
         defer { writing = false }
         let facts = kind.facts(activities, days, format)
         do {
-            try await Coach.write(facts: facts, instructions: kind.instructions, temperature: kind == .daily ? 0.3 : 0.6) { text = $0 }
+            try await Coach.write(facts: facts, instructions: kind.instructions, temperature: kind == .daily ? 0.4 : 0.6) { text = $0 }
             savedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
             savedDate = today
         } catch {
