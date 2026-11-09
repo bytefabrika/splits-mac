@@ -36,11 +36,10 @@ struct RouteSnapshot: View {
                     .drawingGroup()
                     if let first = analysis.route.first {
                         Circle().fill(.green).frame(width: 16, height: 16).overlay(Circle().stroke(.white, lineWidth: 3))
-                            .shadow(radius: 2)
                             .position(project(first, in: mapRect, size: size))
                     }
                     if let last = analysis.route.last {
-                        Image(systemName: "flag.checkered.circle.fill").font(.title).foregroundStyle(.white, .black).shadow(radius: 2)
+                        Image(systemName: "flag.checkered.circle.fill").font(.title).foregroundStyle(.white, .black)
                             .position(project(last, in: mapRect, size: size))
                     }
                     if let km = selectedKm,
@@ -49,7 +48,6 @@ struct RouteSnapshot: View {
                             Circle().fill(sport.color.opacity(0.3)).frame(width: 34, height: 34)
                             Circle().fill(sport.color).frame(width: 16, height: 16).overlay(Circle().stroke(.white, lineWidth: 3))
                         }
-                        .shadow(radius: 4)
                         .position(project(coordinate, in: mapRect, size: size))
                     }
                 }
