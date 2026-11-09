@@ -10,6 +10,8 @@ A native macOS app that shows your own Garmin Connect data (activities, sleep, H
 ## API (see github.com/garmin/connect-personal-api-python, the only readable endpoint list; the Swagger page is JS-rendered)
 - Base `https://personal.connectapi.garmin.com`. `POST /personalapitoken-service/personal-api/personal-api-key/token` with `Authorization: ApiKey <key>` returns the bearer token **as plain text**; valid 24 h, no refresh token.
 - Units are SI (metres, seconds, m/s). Activity types are stable keys (`running`, `indoor_cycling`, `virtual_ride`, `lap_swimming`, and padel is `paddelball`).
+- Intraday: heart rate via `/wellness-service/wellness/dailyHeartRate?date=` (every 2 min); Body Battery via the daily report with `chunks` (96 = every 6 min, 200 = every 3; without it ~6 points a day). **Not available** (404): intraday stress, calendar, scheduled workouts, races, training plans. `/activity-service/activity/{id}/workouts` does return the planned workout an activity was done against (the user didn't want a calendar built from those).
+- Menu bar (`Views/MenuBar.swift`): `LiveToday` fetches today's Body Battery, heart rate, daily summary (stress durations) and steps when the panel opens and every 15 min; nothing stored. Skipped under XCTest.
 - `calendarDate` is **null** on days without data (sleep, HRV…): every DTO field is optional.
 - No published rate limits and no rate headers: `GarminClient` sends one request at a time with a 0.35 s gap, retries 429 with backoff, renews the token once on 401.
 - A full sync of ~2,000 activities and a year of daily data takes ~30 s.
