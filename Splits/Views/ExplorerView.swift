@@ -26,6 +26,7 @@ struct ExplorerView: View {
     /// A year picked in the list: the map shows only that year's countries and trips.
     @State private var year: Int?
     @State private var camera: MapCameraPosition = .automatic
+    @State private var hovered: (Country, CGPoint)?
     /// Where the map is looking now, so the mouse wheel can zoom from there.
     @State private var current: MapCamera?
     @State private var hovering = false
@@ -86,7 +87,24 @@ struct ExplorerView: View {
 
     // MARK: Map
 
+    /// "🇳🇱 Netherlands · 1,101 runs · 8,240 km", or just the name for a country you haven't been to.
+    private func describe(_ c: Country) -> String {
+        guard let v = travels.visits.first(where: { $0.country == c }) else { return "\(c.flag) \(c.name)" }
+        var text = "\(c.flag) \(c.name) · \(v.count) \(noun(v.count))"
+        if v.distance > 0 { text += " · \(format.distance(v.distance, decimals: 0))" }
+        return text
+    }
+
+    private func noun(_ n: Int) -> String {
+        switch filter {
+        case .run: n == 1 ? "run" : "runs"
+        case .ride: n == 1 ? "ride" : "rides"
+        case .all: n == 1 ? "activity" : "activities"
+        }
+    }
+
     private var map: some View {
+        MapReader { proxy in
         Map(position: $camera) {
             ForEach(shapes.indices, id: \.self) { i in
                 MapPolygon(coordinates: shapes[i])
@@ -116,6 +134,17 @@ struct ExplorerView: View {
         }
         .onMapCameraChange(frequency: .continuous) { current = $0.camera }
         .onHover { hovering = $0 }
+        .onContinuousHover { phase in
+            if case .active(let p) = phase, let c = proxy.convert(p, from: .local),
+               let country = Atlas.shared.country(lat: c.latitude, lon: c.longitude) {
+                hovered = (country, p)
+            } else {
+                hovered = nil
+            }
+        }
+        .overlay(alignment: .topLeading) {
+            if let (country, p) = hovered { Tooltip(text: describe(country)).offset(x: p.x + 14, y: p.y + 10) }
+        }
         .onAppear { startWheelZoom() }
         .onDisappear { if let wheel { NSEvent.removeMonitor(wheel) }; wheel = nil }
         .overlay {
@@ -125,6 +154,7 @@ struct ExplorerView: View {
                     .padding(30)
                     .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 16))
             }
+        }
         }
     }
 
@@ -234,14 +264,14 @@ struct ExplorerView: View {
 
     private var allCountries: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Every country, in the order you got there").font(.headline)
-            ForEach(Array(travels.visits.enumerated()), id: \.element.id) { i, v in
+            Text("Every country, most \(noun(2)) first").font(.headline)
+            ForEach(Array(travels.visits.sorted { ($0.count, $0.distance) > ($1.count, $1.distance) }.enumerated()), id: \.element.id) { i, v in
                 HStack(spacing: 8) {
                     Text("\(i + 1)").font(.caption.monospacedDigit()).foregroundStyle(.secondary).frame(width: 22, alignment: .trailing)
                     Text(v.country.flag)
                     VStack(alignment: .leading, spacing: 0) {
                         Text(v.country.name).font(.callout.weight(.semibold))
-                        Text(v.first.formatted(.dateTime.day().month(.abbreviated).year()))
+                        Text("First \(v.first.formatted(.dateTime.day().month(.abbreviated).year()))")
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
@@ -254,5 +284,18 @@ struct ExplorerView: View {
                 }
             }
         }
+    }
+}
+
+struct Tooltip: View {
+    let text: String
+    var body: some View {
+        Text(text)
+            .font(.callout.weight(.semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(Color.black.opacity(0.82), in: RoundedRectangle(cornerRadius: 8))
+            .fixedSize()
+            .allowsHitTesting(false)
     }
 }
