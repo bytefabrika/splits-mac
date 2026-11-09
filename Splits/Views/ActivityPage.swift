@@ -511,25 +511,28 @@ struct TrackCharts: View {
         let minSpeed = isPaceSport ? 1.0 : 0.3
         let paceSport = isPaceSport, imperial = format.imperial
         func value(_ speed: Double) -> Double { paceSport ? unitMetres / speed : (imperial ? speed * 2.236936 : speed * 3.6) }
+        // Faster pace is a smaller number but belongs at the top, so pace is drawn negated and labelled without
+        // the sign. (A reversed ClosedRange would trap.)
+        let sign = paceSport ? -1.0 : 1.0
         let moving = samples.filter { ($0.speed ?? 0) > minSpeed }
         // Keep the axis on the bulk of the activity: a stop or a GPS glitch shouldn't stretch it.
         let sorted = moving.map { value($0.speed!) }.sorted()
         let low = sorted.isEmpty ? 0 : sorted[sorted.count / 50]
         let high = sorted.isEmpty ? 1 : sorted[min(sorted.count * 49 / 50, sorted.count - 1)]
         let pad = max((high - low) * 0.15, isPaceSport ? 10 : 1)
-        let domain = (low - pad)...(high + pad)
+        let domain = paceSport ? (-(high + pad))...(-(low - pad)) : (low - pad)...(high + pad)
         let average = isPaceSport ? activity.paceSecondsPerKm.map { $0 * unitMetres / 1000 } : activity.averageSpeed.map(value)
         return frame(isPaceSport ? "Pace" : "Speed", "speedometer", activity.sport.color) {
             Chart {
                 ForEach(moving) { s in
                     LineMark(x: .value("Distance", s.km * toUnit),
-                             y: .value("Pace", min(max(value(s.speed!), domain.lowerBound), domain.upperBound)))
+                             y: .value("Pace", min(max(sign * value(s.speed!), domain.lowerBound), domain.upperBound)))
                         .interpolationMethod(.catmullRom)
                         .foregroundStyle(activity.sport.color)
                         .lineStyle(StrokeStyle(lineWidth: 2))
                 }
                 if let average {
-                    RuleMark(y: .value("Average", average))
+                    RuleMark(y: .value("Average", sign * average))
                         .foregroundStyle(activity.sport.color.opacity(0.5))
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
                         .annotation(position: .top, alignment: .leading) {
@@ -538,13 +541,13 @@ struct TrackCharts: View {
                 }
                 cursor(selected)
             }
-            .chartYScale(domain: isPaceSport ? domain.upperBound...domain.lowerBound : domain)
+            .chartYScale(domain: domain)
             .chartYAxis {
                 AxisMarks { v in
                     AxisGridLine()
                     AxisValueLabel {
                         if let x = v.as(Double.self) {
-                            Text(paceSport ? String(format: "%d:%02d", Int(x) / 60, Int(x) % 60) : "\(Int(x))")
+                            Text(paceSport ? String(format: "%d:%02d", Int(abs(x)) / 60, Int(abs(x)) % 60) : "\(Int(x))")
                         }
                     }
                 }
