@@ -105,7 +105,7 @@ struct TrackAnalysis {
     static let pauseGap: TimeInterval = 15
 
     /// `splitLength`: 1000 m, or 1609.344 m for miles.
-    init(_ track: Track, splitLength: Double = 1000, maxSamples: Int = 320) {
+    init(_ track: Track, splitLength: Double = 1000, maxSamples: Int = 240) {
         let points = track.points
         let start = points.first?.time ?? Date()
         // Timer time: the watch stops recording while paused (lights, a coffee), so a long gap between two

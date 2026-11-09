@@ -147,7 +147,7 @@ struct ActivityPage: View {
         }
         .frame(height: 210)
         .clipShape(RoundedRectangle(cornerRadius: 22))
-        .shadow(color: sport.color.opacity(0.35), radius: 18, y: 8)
+        // No shadow: a big blurred shadow is redrawn on every frame while scrolling.
     }
 
     /// Garmin's "how did it feel": 0, 25, 50, 75, 100.
@@ -342,7 +342,8 @@ struct PaceLegend: View {
             Text("Faster").font(.caption2.weight(.semibold))
         }
         .padding(.horizontal, 10).padding(.vertical, 6)
-        .background(.regularMaterial, in: Capsule())
+        .foregroundStyle(.white)
+        .background(Color.black.opacity(0.55), in: Capsule())  // solid, not a blur: cheaper to scroll
     }
 }
 
@@ -438,6 +439,8 @@ struct TrackCharts: View {
                     }
                 }
                 .frame(height: height)
+                // One flattened layer per chart instead of hundreds of marks to composite while scrolling.
+                .drawingGroup()
         }
     }
 
@@ -645,17 +648,14 @@ struct SplitsCard: View {
                 let isFastest = abs(rate - fastest) < 1e-9
                 HStack(spacing: 10) {
                     Text("\(split.id)").font(.caption.monospacedDigit()).foregroundStyle(.secondary).frame(width: 24, alignment: .trailing)
-                    GeometryReader { geo in
-                        let share = slowest > fastest ? 0.25 + 0.75 * (slowest - rate) / (slowest - fastest) : 1
-                        ZStack(alignment: .leading) {
-                            Capsule().fill(.quaternary.opacity(0.5))
+                    let share = slowest > fastest ? 0.25 + 0.75 * (slowest - rate) / (slowest - fastest) : 1
+                    Capsule().fill(.quaternary.opacity(0.5))
+                        .overlay(alignment: .leading) {
                             Capsule()
-                                .fill(isFastest ? AnyShapeStyle(sport.color.gradient)
-                                      : AnyShapeStyle((rate <= average ? sport.color : sport.color.opacity(0.45)).opacity(0.75)))
-                                .frame(width: max(geo.size.width * min(max(share, 0.06), 1), 6))
+                                .fill(isFastest ? sport.color : (rate <= average ? sport.color : sport.color.opacity(0.45)).opacity(0.75))
+                                .scaleEffect(x: min(max(share, 0.06), 1), anchor: .leading)
                         }
-                    }
-                    .frame(height: 14)
+                        .frame(height: 14)
                     Text(isPaceSport ? format.pace(secondsPerKm: rate * 1000) : format.speed(metresPerSecond: 1 / rate))
                         .font(.callout.monospacedDigit().weight(isFastest ? .bold : .regular))
                         .frame(width: 92, alignment: .trailing)
@@ -894,11 +894,16 @@ struct CoachCard: View {
     @State private var text = ""
     @State private var writing = false
     @State private var failure: String?
+    /// Checked once when the card appears: asking the system on every redraw is wasted work.
+    @State private var status: Coach.Status = .unavailable("")
 
     var body: some View {
-        let status = Coach.status
+        content.onAppear { status = Coach.status }
+    }
+
+    @ViewBuilder private var content: some View {
         if case .unavailable(let reason) = status, activity.coachNote == nil {
-            if #available(macOS 26, *) {
+            if #available(macOS 26, *), !reason.isEmpty {
                 Label(reason, systemImage: "sparkles").font(.caption).foregroundStyle(.secondary)
             }
         } else {
