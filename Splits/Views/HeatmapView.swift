@@ -49,7 +49,7 @@ struct HeatmapView: View {
         }
         .navigationTitle("Heatmap")
         .task(id: "\(filter.rawValue)-\(year ?? 0)-\(builder.version)-\(activities.count)") { await reload() }
-        .task { await builder.refreshCounts(candidates.map(\.garminId)) }
+        .task(id: activities.count) { if !builder.running { await builder.refreshCounts(candidates.map(\.garminId)) } }
     }
 
     private var controls: some View {
@@ -89,6 +89,8 @@ struct HeatmapView: View {
                 if builder.running {
                     Text("Drawing your routes… \(builder.done) of \(builder.total)").fontWeight(.semibold)
                     ProgressView(value: builder.progress).frame(width: 260)
+                } else if candidates.isEmpty {
+                    Text("No outdoor activities to draw yet").fontWeight(.semibold)
                 } else {
                     Text(builder.done == 0 ? "Draw your heatmap" : "\(builder.done) of \(builder.total) routes drawn").fontWeight(.semibold)
                     Text("Each route comes from the activity's file on Garmin: about a second each, once. Your Mac keeps a small copy.")
@@ -103,6 +105,7 @@ struct HeatmapView: View {
                 Button(builder.done == 0 ? "Start" : "Continue") { builder.start(candidates.map(\.garminId)) }
                     .buttonStyle(.borderedProminent)
                     .tint(.orange)
+                    .disabled(candidates.isEmpty)
             }
         }
         .padding(12)
@@ -123,9 +126,10 @@ struct HeatmapView: View {
         let newOverlay = HeatOverlay(routes: routes.compactMap { id, points in
             points.count > 1 ? HeatOverlay.Route(points: points.map(MKMapPoint.init), color: NSColor(sports[id]?.color ?? .orange)) : nil
         })
-        let firstTime = overlay == nil || fitRect == nil
+        let firstTime = fitRect == nil
         overlay = newOverlay
-        if firstTime, let home = Self.home(chosen) {
+        // Start where most activities begin; without start coordinates yet, wherever the drawn routes are.
+        if firstTime, let home = Self.home(chosen) ?? (newOverlay.boundingMapRect.isNull ? nil : newOverlay.boundingMapRect) {
             fitRect = home
             fitToken += 1
         }

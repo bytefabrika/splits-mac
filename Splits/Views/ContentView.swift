@@ -71,8 +71,9 @@ struct ContentView: View {
             if sync == nil { sync = Sync(context: context) }
             // Data from before the welcome screen existed: nothing to count up, go straight in.
             if sync?.lastSync != nil && !(sync?.isRunning ?? false) { welcomed = true }
-            // Sync on launch, at most once an hour.
-            if hasKey, let sync, (sync.lastSync.map { Date().timeIntervalSince($0) > 3600 } ?? true) {
+            // Sync on launch, at most once an hour, or right away if start coordinates still need filling in.
+            let needsBackfill = !UserDefaults.standard.bool(forKey: "coordinatesBackfilled")
+            if hasKey, let sync, needsBackfill || (sync.lastSync.map { Date().timeIntervalSince($0) > 3600 } ?? true) {
                 Task { await sync.run() }
             }
         }

@@ -182,9 +182,10 @@ enum Sport: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Has a route worth drawing: outdoors, with a GPS start.
+    /// Might have a route worth drawing: outdoors with a distance. Whether it really has GPS is only known from
+    /// its file (start coordinates may not be filled in yet), and a route without GPS is simply empty.
     static func hasRoute(_ a: Activity) -> Bool {
-        a.startLatitude != nil && a.distance > 0 && !isIndoor(a.typeKey)
+        a.distance > 0 && !isIndoor(a.typeKey)
     }
 
     /// Indoor activities have no real route or climbing.
