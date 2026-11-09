@@ -274,10 +274,13 @@ struct ReportCard: View {
     @State private var text = ""
     @State private var writing = false
     @State private var failure: String?
-    @State private var status: Coach.Status = .unavailable("")
+    @State private var status: Coach.Status
 
     init(_ kind: Kind, days: [Day], activities: [Activity]) {
         self.kind = kind
+        // Checked here, not in onAppear: when the model isn't ready the card is empty, and an empty view
+        // never appears, so it would never find out the model became ready.
+        _status = State(initialValue: Coach.status)
         self.days = days
         self.activities = activities
         let key = kind == .daily ? "daily" : "weekly"
@@ -290,8 +293,7 @@ struct ReportCard: View {
     private var sleepSynced: Bool { days.contains { $0.date == today && $0.sleepSeconds != nil } }
 
     var body: some View {
-        content
-            .onAppear { status = Coach.status }
+        VStack { content }
             .task(id: "\(status == .ready)-\(sleepSynced)") {
                 if kind == .daily, status == .ready, sleepSynced, savedDate != today, !writing { await write() }
             }
@@ -337,6 +339,16 @@ struct ReportCard: View {
                 LinearGradient(colors: kind.colors.map { $0.opacity(0.1) }, startPoint: .topLeading, endPoint: .bottomTrailing),
                 in: RoundedRectangle(cornerRadius: 14)
             )
+        } else if kind == .daily, case .unavailable(let reason) = status {
+            HStack(spacing: 10) {
+                Image(systemName: kind.symbol).foregroundStyle(.secondary)
+                Text("A daily briefing appears here once Apple Intelligence is ready. \(reason)")
+                    .font(.callout).foregroundStyle(.secondary)
+                Spacer()
+                Button("Check again") { status = Coach.status }
+            }
+            .padding(12)
+            .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
         }
     }
 
