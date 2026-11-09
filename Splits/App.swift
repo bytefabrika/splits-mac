@@ -21,6 +21,8 @@ struct SplitsApp: App {
         if CommandLine.arguments.contains("--map-test") { DebugSync.map() }
         // `SPLITS_KEY=… Splits --routes-test` builds routes for the 10 newest outdoor activities in the store.
         if CommandLine.arguments.contains("--routes-test") { DebugSync.routes(container: container) }
+        // `Splits --card-test < activity.zip > card.png`: the share card for the newest activity, with that file's route.
+        if CommandLine.arguments.contains("--card-test") { DebugSync.card(container: container) }
         #endif
     }
 
@@ -149,6 +151,20 @@ enum DebugSync {
                 print("  \(a.typeKey) \(Int(a.distance)) m → \(routes[a.garminId]?.count ?? 0) points")
             }
             print("took \(String(format: "%.1f", Date().timeIntervalSince(started))) s")
+            exit(0)
+        }
+    }
+
+    static func card(container: ModelContainer) {
+        let input = FileHandle.standardInput.readDataToEndOfFile()
+        Task { @MainActor in
+            let fitData = (try? Zip.entries(input).first { $0.name.lowercased().hasSuffix(".fit") }?.data) ?? input
+            let route = (try? FIT.decode(fitData)).map { TrackAnalysis($0).route } ?? []
+            var latest = FetchDescriptor<Activity>(predicate: #Predicate { $0.distance > 20_000 }, sortBy: [SortDescriptor(\.start, order: .reverse)])
+            latest.fetchLimit = 1
+            guard let activity = try? container.mainContext.fetch(latest).first,
+                  let png = ShareCard.png(activity: activity, route: route, format: Format(units: "metric")) else { exit(1) }
+            FileHandle.standardOutput.write(png)
             exit(0)
         }
     }

@@ -15,6 +15,7 @@ struct ActivityPage: View {
     /// The chart cursor, in the user's distance unit (km or miles).
     @State private var selectedKm: Double?
     @State private var exploringMap = false
+    @State private var sharing = false
 
     private var sport: Sport { activity.sport }
     private var isPaceSport: Bool { [.run, .walk, .hike].contains(sport) }
@@ -80,6 +81,15 @@ struct ActivityPage: View {
         }
         .navigationTitle(title)
         .task(id: activity.garminId) { await load() }
+        .toolbar {
+            ToolbarItem {
+                Button { sharing = true } label: { Label("Share", systemImage: "square.and.arrow.up") }
+                    .help("Make a picture of this activity to share")
+            }
+        }
+        .sheet(isPresented: $sharing) {
+            ShareSheet(activity: activity, route: analysis?.route ?? [])
+        }
         .sheet(isPresented: $exploringMap) {
             if let analysis {
                 MapExplorer(analysis: analysis, sport: sport, title: title)

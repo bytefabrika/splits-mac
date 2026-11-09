@@ -1,3 +1,4 @@
+import CoreLocation
 import SwiftData
 import SwiftUI
 import XCTest
@@ -75,5 +76,26 @@ final class ViewRenderTests: XCTestCase {
         let detail = try JSONDecoder().decode(ActivityDetailDTO.self, from: Data(json.utf8))
         render(StatGroups(activity: activity("running"), detail: detail.summaryDTO, isPaceSport: true))
         render(StatGroups(activity: activity("strength_training"), detail: nil, isPaceSport: false))
+    }
+}
+
+@MainActor
+final class ShareCardTests: XCTestCase {
+    func testCardRendersAtInstagramSize() throws {
+        let a = Activity(garminId: 7)
+        a.typeKey = "running"
+        a.name = "Sunday long run"
+        a.distance = 21_100
+        a.movingDuration = 7_000
+        a.elevationGain = 85
+        let route = (0..<200).map { i in
+            CLLocationCoordinate2D(latitude: 52.09 + sin(Double(i) / 30) * 0.01, longitude: 5.12 + Double(i) * 0.0002)
+        }
+        let png = try XCTUnwrap(ShareCard.png(activity: a, route: route, format: Format(units: "metric")))
+        let image = try XCTUnwrap(NSBitmapImageRep(data: png))
+        XCTAssertEqual(image.pixelsWide, 1080)
+        XCTAssertEqual(image.pixelsHigh, 1350)
+        // Without a route (an indoor session) it still draws.
+        XCTAssertNotNil(ShareCard.png(activity: a, route: [], format: Format(units: "metric")))
     }
 }
