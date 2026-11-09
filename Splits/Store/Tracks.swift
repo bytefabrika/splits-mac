@@ -35,6 +35,33 @@ actor Tracks {
         return track
     }
 
+    private var details: [Int64: ActivityDetailDTO] = [:]
+    private var zones: [HeartRateZonesDTO]?
+
+    /// The activity's extra numbers (stamina, sweat, Body Battery impact, running dynamics). Cached on disk.
+    func detail(for id: Int64) async throws -> ActivityDetailDTO {
+        if let cached = details[id] { return cached }
+        let file = folder.appendingPathComponent("\(id).json")
+        if let data = try? Data(contentsOf: file), let saved = try? JSONDecoder().decode(ActivityDetailDTO.self, from: data) {
+            details[id] = saved
+            return saved
+        }
+        let detail: ActivityDetailDTO = try await client.get("/activity-service/activity/\(id)")
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try? JSONEncoder().encode(detail).write(to: file, options: .atomic)
+        details[id] = detail
+        return detail
+    }
+
+    /// The user's heart rate zones for a sport, falling back to their default zones. Fetched once per launch.
+    func zones(for sport: Sport) async -> [Int] {
+        if zones == nil { zones = try? await client.get("/biometric-service/heartRateZones/v2") }
+        let key = sport == .run ? "RUNNING" : sport == .ride ? "CYCLING" : sport == .swim ? "SWIMMING" : "DEFAULT"
+        let all = zones ?? []
+        let match = all.first { $0.sport == key } ?? all.first { $0.sport == "DEFAULT" }
+        return match?.floors.count == 5 ? match!.floors : []
+    }
+
     func removeAll() {
         memory = [:]
         try? FileManager.default.removeItem(at: folder)

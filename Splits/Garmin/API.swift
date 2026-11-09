@@ -36,6 +36,50 @@ struct ActivityDTO: Decodable {
     let hrTimeInZone_5: Double?
 }
 
+/// The extra numbers on one activity (`/activity-service/activity/{id}`, `summaryDTO`). SI units; times in ms
+/// for running dynamics, stride in cm, water in ml.
+struct ActivityDetailDTO: Codable {
+    struct Summary: Codable {
+        let averageMovingSpeed: Double?
+        let avgGradeAdjustedSpeed: Double?
+        let recoveryHeartRate: Double?
+        let waterEstimated: Double?
+        let differenceBodyBattery: Double?
+        let beginPotentialStamina: Double?
+        let endPotentialStamina: Double?
+        let directWorkoutFeel: Double?
+        let directWorkoutRpe: Double?
+        let groundContactTime: Double?
+        let strideLength: Double?
+        let verticalOscillation: Double?
+        let verticalRatio: Double?
+        let normalizedPower: Double?
+        let maxPower: Double?
+        let totalWork: Double?
+        let averageTemperature: Double?
+        let minHR: Double?
+        let maxElevation: Double?
+        let minElevation: Double?
+        let moderateIntensityMinutes: Double?
+        let vigorousIntensityMinutes: Double?
+    }
+    let summaryDTO: Summary?
+    let locationName: String?
+}
+
+/// Heart rate zone floors, per sport ("DEFAULT", "RUNNING", "CYCLING"…).
+struct HeartRateZonesDTO: Codable {
+    let sport: String?
+    let zone1Floor: Int?
+    let zone2Floor: Int?
+    let zone3Floor: Int?
+    let zone4Floor: Int?
+    let zone5Floor: Int?
+    let maxHeartRateUsed: Int?
+
+    var floors: [Int] { [zone1Floor, zone2Floor, zone3Floor, zone4Floor, zone5Floor].compactMap { $0 } }
+}
+
 struct DailySummariesDTO: Decodable {
     struct Day: Decodable {
         struct HeartRate: Decodable { let restingValue: Int?; let minValue: Int?; let maxValue: Int? }
