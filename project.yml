@@ -1,0 +1,49 @@
+# Generate the Xcode project with `xcodegen` (brew install xcodegen). The .xcodeproj isn't committed.
+name: Splits
+options:
+  bundleIdPrefix: com.bytefabrika
+  deploymentTarget:
+    macOS: "14.0"
+settings:
+  base:
+    DEVELOPMENT_TEAM: SH5W9F58G9
+    CODE_SIGN_STYLE: Automatic
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1"
+    CURRENT_PROJECT_VERSION: "1"
+    ENABLE_HARDENED_RUNTIME: YES
+    DEAD_CODE_STRIPPING: YES
+targets:
+  Splits:
+    type: application
+    platform: macOS
+    sources: [Splits]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.bytefabrika.splits
+        PRODUCT_NAME: Splits
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Splits
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.healthcare-fitness
+        INFOPLIST_KEY_NSHumanReadableCopyright: "© 2026 Bytefabrika"
+        CODE_SIGN_ENTITLEMENTS: Splits/Splits.entitlements
+  SplitsTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources: [SplitsTests]
+    dependencies:
+      - target: Splits
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.bytefabrika.splits.tests
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Splits.app/Contents/MacOS/Splits"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+schemes:
+  Splits:
+    build:
+      targets:
+        Splits: all
+        SplitsTests: [test]
+    test:
+      targets: [SplitsTests]
