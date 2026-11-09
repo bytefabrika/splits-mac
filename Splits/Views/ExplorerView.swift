@@ -27,7 +27,7 @@ struct ExplorerView: View {
     @State private var year: Int?
     @State private var camera: MapCameraPosition = .automatic
     /// Where the map is looking now, so the mouse wheel can zoom from there.
-    @State private var region: MKCoordinateRegion?
+    @State private var current: MapCamera?
     @State private var hovering = false
     @State private var wheel: Any?
     /// The shapes for the countries on the map, worked out when they change rather than on every frame.
@@ -114,7 +114,7 @@ struct ExplorerView: View {
             MapCompass()
             MapScaleView()
         }
-        .onMapCameraChange(frequency: .continuous) { region = $0.region }
+        .onMapCameraChange(frequency: .continuous) { current = $0.camera }
         .onHover { hovering = $0 }
         .onAppear { startWheelZoom() }
         .onDisappear { if let wheel { NSEvent.removeMonitor(wheel) }; wheel = nil }
@@ -132,11 +132,12 @@ struct ExplorerView: View {
     private func startWheelZoom() {
         guard wheel == nil else { return }
         wheel = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
-            guard hovering, !event.hasPreciseScrollingDeltas, event.scrollingDeltaY != 0, let region else { return event }
-            let factor = pow(1.3, -max(-4, min(4, event.scrollingDeltaY)))
-            let span = MKCoordinateSpan(latitudeDelta: min(160, max(0.01, region.span.latitudeDelta * factor)),
-                                        longitudeDelta: min(340, max(0.01, region.span.longitudeDelta * factor)))
-            camera = .region(MKCoordinateRegion(center: region.center, span: span))
+            guard hovering, !event.hasPreciseScrollingDeltas, event.scrollingDeltaY != 0, let current else { return event }
+            // Wheel up zooms in, down zooms out. MapKit stops at the whole world by itself.
+            let factor = pow(1.35, -max(-4, min(4, event.scrollingDeltaY)))
+            let distance = min(40_000_000, max(500, current.distance * factor))
+            camera = .camera(MapCamera(centerCoordinate: current.centerCoordinate, distance: distance,
+                                       heading: current.heading, pitch: current.pitch))
             return nil
         }
     }
