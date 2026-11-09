@@ -77,3 +77,9 @@ final class CoachFactsTests: XCTestCase {
         XCTAssertTrue(facts.contains("Yesterday: Running of 10"), facts)
     }
 }
+
+final class DashTests: XCTestCase {
+    func testNoEmDashes() {
+        XCTAssertEqual(Coach.withoutDashes("Rest today—your HRV is low — sorry."), "Rest today, your HRV is low, sorry.")
+    }
+}

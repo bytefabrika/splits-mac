@@ -936,7 +936,7 @@ struct CoachCard: View {
                 }
                 let shown = writing ? text : (activity.coachNote ?? "")
                 if !shown.isEmpty {
-                    Text(shown)
+                    Text(Coach.withoutDashes(shown))
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                         .animation(.default, value: shown)

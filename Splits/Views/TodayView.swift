@@ -315,7 +315,7 @@ struct ReportCard: View {
                 }
                 let shown = writing ? text : (savedDate == today ? savedText : "")
                 if !shown.isEmpty {
-                    Text(shown).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                    Text(Coach.withoutDashes(shown)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
                 } else if !writing {
                     HStack(spacing: 12) {
                         Button { Task { await write() } } label: { Label(kind.ask, systemImage: "wand.and.stars") }

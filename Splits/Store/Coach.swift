@@ -35,6 +35,7 @@ enum Coach {
     3. One practical suggestion for recovery or the next session, taking last night's sleep, HRV and Body Battery \
     into account when given.
     Only use the facts provided; never invent numbers. Be encouraging but honest. No medical advice.
+    Never use em dashes (—); use commas or full stops instead.
     """
 
     /// Streams the take. `onText` gets the text so far, on the main actor.
@@ -46,12 +47,17 @@ enum Coach {
             let session = LanguageModelSession(model: .default, instructions: instructions)
             let stream = session.streamResponse(to: facts, options: GenerationOptions(temperature: temperature))
             for try await snapshot in stream {
-                onText(snapshot.content)
+                onText(withoutDashes(snapshot.content))
             }
             return
         }
         #endif
         throw CocoaError(.featureUnsupported)
+    }
+
+    /// The model still writes the odd em dash despite being asked not to: "a — b" and "a—b" become "a, b".
+    static func withoutDashes(_ text: String) -> String {
+        text.replacingOccurrences(of: #"\s*—\s*"#, with: ", ", options: .regularExpression)
     }
 
     /// The workout as compact facts for the model. Units follow the user's settings.
@@ -134,6 +140,7 @@ enum Coach {
     3. Today's recommendation exactly as given, plus the run streak if it's given.
     Use at most four numbers, copied exactly from the facts. Never make up events, causes or comparisons. \
     Teasing is fine, guilt-tripping isn't. No medical advice.
+    Never use em dashes (—); use commas or full stops instead.
     """
 
     /// This morning's numbers against the two weeks before, plus recent training, as compact facts for the model.
