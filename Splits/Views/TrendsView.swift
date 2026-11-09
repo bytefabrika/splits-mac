@@ -19,7 +19,6 @@ struct TrendsView: View {
     @Query(sort: \Activity.start) private var allActivities: [Activity]
     @Environment(\.format) private var format
     @State private var range: Range = .year
-    @State private var storyYear: Int?
 
     private var since: Date {
         range.days.map { Calendar.current.date(byAdding: .day, value: -$0, to: Date())! } ?? .distantPast
@@ -33,26 +32,12 @@ struct TrendsView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    HStack {
-                        Picker("Range", selection: $range) {
-                            ForEach(Range.allCases) { Text($0.rawValue).tag($0) }
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                        .frame(maxWidth: 360)
-                        Spacer()
-                        Menu {
-                            ForEach(storyYears, id: \.self) { year in
-                                Button(String(year)) { storyYear = year }
-                            }
-                        } label: {
-                            Label("Year in Sport", systemImage: "sparkles")
-                        } primaryAction: {
-                            storyYear = storyYears.first
-                        }
-                        .fixedSize()
-                        .help("Your year as a story")
+                    Picker("Range", selection: $range) {
+                        ForEach(Range.allCases) { Text($0.rawValue).tag($0) }
                     }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(maxWidth: 360)
 
                     highlights(activities, days)
                     ActivityCalendar(activities: allActivities)
@@ -81,9 +66,6 @@ struct TrendsView: View {
                 .contentShape(Rectangle())
             }
             .navigationTitle("Trends")
-            .sheet(item: Binding(get: { storyYear.map(StoryYear.init) }, set: { storyYear = $0?.id })) { item in
-                YearStory(stats: YearStats(year: item.id, activities: allActivities, days: allDays), format: format)
-            }
             .navigationDestination(for: Int64.self) { id in
                 if let activity = allActivities.first(where: { $0.garminId == id }) { ActivityPage(activity: activity) }
             }
@@ -346,13 +328,6 @@ struct TrendsView: View {
                 }
             }
         }
-    }
-
-    private struct StoryYear: Identifiable { let id: Int }
-
-    /// Years with activities, newest first.
-    private var storyYears: [Int] {
-        Array(Set(allActivities.map { Calendar.current.component(.year, from: $0.start) })).sorted(by: >)
     }
 
     private func average(_ values: [Int]) -> Int? {

@@ -23,8 +23,6 @@ struct SplitsApp: App {
         if CommandLine.arguments.contains("--routes-test") { DebugSync.routes(container: container) }
         // `Splits --card-test < activity.zip > card.png`: the share card for the newest activity, with that file's route.
         if CommandLine.arguments.contains("--card-test") { DebugSync.card(container: container) }
-        // `Splits --story-test > story.png`: every Year in Sport slide for this year, side by side.
-        if CommandLine.arguments.contains("--story-test") { DebugSync.story(container: container) }
         #endif
     }
 
@@ -166,32 +164,6 @@ enum DebugSync {
             latest.fetchLimit = 1
             guard let activity = try? container.mainContext.fetch(latest).first,
                   let png = ShareCard.png(activity: activity, route: route, format: Format(units: "metric")) else { exit(1) }
-            FileHandle.standardOutput.write(png)
-            exit(0)
-        }
-    }
-
-    static func story(container: ModelContainer) {
-        Task { @MainActor in
-            let activities = (try? container.mainContext.fetch(FetchDescriptor<Activity>())) ?? []
-            let days = (try? container.mainContext.fetch(FetchDescriptor<Day>())) ?? []
-            let year = Calendar.current.component(.year, from: Date())
-            let stats = YearStats(year: year, activities: activities, days: days)
-            let format = Format(units: "metric")
-            let count = YearStory(stats: stats, format: format).slideCount
-            let size = CGSize(width: 820, height: 860), columns = 5
-            let rows = (count + columns - 1) / columns
-            let sheet = NSImage(size: CGSize(width: size.width * CGFloat(columns) / 2, height: size.height * CGFloat(rows) / 2))
-            sheet.lockFocus()
-            for i in 0..<count {
-                let renderer = ImageRenderer(content: YearStory(stats: stats, format: format, startAt: i).frame(width: size.width, height: size.height))
-                renderer.scale = 1
-                guard let image = renderer.nsImage else { continue }
-                let x = CGFloat(i % columns) * size.width / 2, y = CGFloat(rows - 1 - i / columns) * size.height / 2
-                image.draw(in: NSRect(x: x, y: y, width: size.width / 2, height: size.height / 2))
-            }
-            sheet.unlockFocus()
-            let png = NSBitmapImageRep(data: sheet.tiffRepresentation!)!.representation(using: .png, properties: [:])!
             FileHandle.standardOutput.write(png)
             exit(0)
         }

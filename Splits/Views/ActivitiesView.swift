@@ -2,21 +2,67 @@ import Charts
 import SwiftData
 import SwiftUI
 
+/// One table row: plain values worked out once, so scrolling and selecting don't touch SwiftData objects.
+struct ActivityTableRow: Identifiable {
+    let id: Int64
+    let start: Date
+    let date: String
+    let name: String
+    let symbol: String
+    let sport: Sport
+    let typeKey: String
+    let distance: Double
+    let distanceText: String
+    let seconds: Double
+    let timeText: String
+    let pace: String
+    let elevation: Double
+    let elevationText: String
+    let heartRate: Double
+    let heartRateText: String
+
+    init(_ a: Activity, format: Format) {
+        id = a.garminId
+        start = a.start
+        date = a.start.formatted(.dateTime.year().month(.abbreviated).day().hour().minute())
+        name = a.name.isEmpty ? Format.title(a.typeKey) : a.name
+        sport = a.sport
+        symbol = a.sport.symbol
+        typeKey = a.typeKey
+        distance = a.distance
+        distanceText = a.distance > 0 ? format.distance(a.distance) : "–"
+        seconds = a.activeSeconds
+        timeText = Format.duration(a.activeSeconds)
+        switch a.sport {
+        case .run, .walk, .hike:
+            pace = a.paceSecondsPerKm.map { format.pace(secondsPerKm: $0) } ?? "–"
+        case .swim where a.distance > 0:
+            let per100 = Int(a.movingDuration / (a.distance / 100))
+            pace = String(format: "%d:%02d /100m", per100 / 60, per100 % 60)
+        default:
+            pace = a.averageSpeed.map { $0 > 0 ? format.speed(metresPerSecond: $0) : "–" } ?? "–"
+        }
+        let outdoorClimb = a.elevationGain > 0 && !Sport.isIndoor(a.typeKey)
+        elevation = outdoorClimb ? a.elevationGain : 0
+        elevationText = outdoorClimb ? format.elevation(a.elevationGain) : "–"
+        heartRate = a.averageHR ?? 0
+        heartRateText = a.averageHR.map { "\(Int($0))" } ?? "–"
+    }
+}
+
 struct ActivitiesView: View {
     @Query(sort: \Activity.start, order: .reverse) private var activities: [Activity]
     @Environment(\.format) private var format
     @State private var search = ""
     @State private var sport: Sport?
-    @State private var selection: Activity.ID?
+    @State private var selection: ActivityTableRow.ID?
     @State private var path: [Int64] = []
-    @State private var sortOrder = [KeyPathComparator(\Activity.start, order: .reverse)]
-
-    private var shown: [Activity] {
-        activities
-            .filter { sport == nil || $0.sport == sport }
-            .filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) || $0.typeKey.contains(search.lowercased()) }
-            .sorted(using: sortOrder)
-    }
+    @State private var sortOrder = [KeyPathComparator(\ActivityTableRow.start, order: .reverse)]
+    /// Every activity as a row, rebuilt only when the activities change.
+    @State private var allRows: [ActivityTableRow] = []
+    /// The rows on screen: filtered and sorted only when the search, sport or sort order changes.
+    @State private var rows: [ActivityTableRow] = []
+    @State private var summary = ""
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -25,32 +71,41 @@ struct ActivitiesView: View {
                     if let activity = activities.first(where: { $0.garminId == id }) { ActivityPage(activity: activity) }
                 }
         }
+        .task(id: "\(activities.count)-\(activities.first?.garminId ?? 0)-\(format.imperial)") {
+            allRows = activities.map { ActivityTableRow($0, format: format) }
+            refilter()
+        }
+        .onChange(of: search) { refilter() }
+        .onChange(of: sport) { refilter() }
+        .onChange(of: sortOrder) { refilter() }
+    }
+
+    private func refilter() {
+        let needle = search.lowercased()
+        rows = allRows
+            .filter { sport == nil || $0.sport == sport }
+            .filter { needle.isEmpty || $0.name.lowercased().contains(needle) || $0.typeKey.contains(needle) }
+            .sorted(using: sortOrder)
+        let distance = rows.reduce(0) { $0 + $1.distance }
+        let time = rows.reduce(0) { $0 + $1.seconds }
+        summary = "\(rows.count) activities · \(format.distance(distance, decimals: 0)) · \(Int(time / 3600)) h"
     }
 
     private var table: some View {
-        let shown = shown
-        return Table(shown, selection: $selection, sortOrder: $sortOrder) {
-            TableColumn("Date", value: \.start) { a in
-                Text(a.start, format: .dateTime.year().month(.abbreviated).day().hour().minute())
-            }
-            .width(min: 130, ideal: 150)
-            TableColumn("Activity", value: \.name) { a in
-                Label(a.name.isEmpty ? Format.title(a.typeKey) : a.name, systemImage: a.sport.symbol)
-            }
-            .width(min: 180, ideal: 260)
-            TableColumn("Distance", value: \.distance) { a in
-                Text(a.distance > 0 ? format.distance(a.distance) : "–").monospacedDigit()
-            }
-            .width(80)
-            TableColumn("Time", value: \.activeSeconds) { a in Text(Format.duration(a.activeSeconds)).monospacedDigit() }
+        Table(rows, selection: $selection, sortOrder: $sortOrder) {
+            TableColumn("Date", value: \.start) { r in Text(r.date) }
+                .width(min: 130, ideal: 150)
+            TableColumn("Activity", value: \.name) { r in Label(r.name, systemImage: r.symbol) }
+                .width(min: 180, ideal: 260)
+            TableColumn("Distance", value: \.distance) { r in Text(r.distanceText).monospacedDigit() }
+                .width(80)
+            TableColumn("Time", value: \.seconds) { r in Text(r.timeText).monospacedDigit() }
                 .width(70)
-            TableColumn("Pace") { a in Text(paceOrSpeed(a)).monospacedDigit() }
+            TableColumn("Pace") { r in Text(r.pace).monospacedDigit() }
                 .width(85)
-            TableColumn("Elevation", value: \.elevationGain) { a in
-                Text(a.elevationGain > 0 && !Sport.isIndoor(a.typeKey) ? format.elevation(a.elevationGain) : "–").monospacedDigit()
-            }
-            .width(70)
-            TableColumn("Avg HR") { a in Text(a.averageHR.map { "\(Int($0))" } ?? "–").monospacedDigit() }
+            TableColumn("Elevation", value: \.elevation) { r in Text(r.elevationText).monospacedDigit() }
+                .width(70)
+            TableColumn("Avg HR", value: \.heartRate) { r in Text(r.heartRateText).monospacedDigit() }
                 .width(55)
         }
         .searchable(text: $search, prompt: "Search activities")
@@ -65,30 +120,11 @@ struct ActivitiesView: View {
             }
         }
         // Double-click or Return opens the activity.
-        .contextMenu(forSelectionType: Activity.ID.self) { _ in } primaryAction: { ids in
-            if let id = ids.first, let activity = shown.first(where: { $0.id == id }) { path.append(activity.garminId) }
+        .contextMenu(forSelectionType: ActivityTableRow.ID.self) { _ in } primaryAction: { ids in
+            if let id = ids.first { path.append(id) }
         }
         .navigationTitle("Activities")
-        .navigationSubtitle(summary(shown))
-    }
-
-    private func paceOrSpeed(_ a: Activity) -> String {
-        switch a.sport {
-        case .run, .walk, .hike:
-            return a.paceSecondsPerKm.map { format.pace(secondsPerKm: $0) } ?? "–"
-        case .swim:
-            guard a.distance > 0 else { return "–" }
-            return String(format: "%d:%02d /100m", Int(a.movingDuration / (a.distance / 100)) / 60,
-                          Int(a.movingDuration / (a.distance / 100)) % 60)
-        default:
-            return a.averageSpeed.map { $0 > 0 ? format.speed(metresPerSecond: $0) : "–" } ?? "–"
-        }
-    }
-
-    private func summary(_ list: [Activity]) -> String {
-        let distance = list.reduce(0) { $0 + $1.distance }
-        let time = list.reduce(0) { $0 + $1.activeSeconds }
-        return "\(list.count) activities · \(format.distance(distance, decimals: 0)) · \(Int(time / 3600)) h"
+        .navigationSubtitle(summary)
     }
 }
 

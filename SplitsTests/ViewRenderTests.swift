@@ -99,38 +99,3 @@ final class ShareCardTests: XCTestCase {
         XCTAssertNotNil(ShareCard.png(activity: a, route: [], format: Format(units: "metric")))
     }
 }
-
-@MainActor
-final class YearStoryTests: XCTestCase {
-    func testStatsAndStoryDraw() {
-        let calendar = Calendar.current
-        var activities: [Activity] = []
-        for i in 0..<60 {
-            let a = Activity(garminId: Int64(i))
-            a.typeKey = i % 3 == 0 ? "road_biking" : "running"
-            a.start = calendar.date(from: DateComponents(year: 2026, month: 1 + i % 11, day: 1 + i % 27, hour: 7 + i % 12))!
-            a.distance = i % 3 == 0 ? 40_000 : 8_000 + Double(i * 100)
-            a.movingDuration = i % 3 == 0 ? 5_400 : 3_000  // runs: 40 × 3,000 s beats rides: 20 × 5,400 s
-            a.elevationGain = 120
-            activities.append(a)
-        }
-        let days = (1...200).map { n -> Day in
-            let d = Day(date: GarminDate.string(calendar.date(from: DateComponents(year: 2026, month: 1, day: 1))!.addingTimeInterval(Double(n) * 86_400)))
-            d.sleepSeconds = 25_000 + n * 10
-            d.sleepScore = 70 + n % 20
-            d.hrvLastNight = 50 + n / 20
-            d.restingHR = 58 - n / 50
-            d.steps = 9_000
-            return d
-        }
-        let stats = YearStats(year: 2026, activities: activities, days: days)
-        XCTAssertEqual(stats.count, 60)
-        XCTAssertEqual(stats.sports.first?.0, .run)
-        XCTAssertNotNil(stats.trend(\.hrvLastNight))
-        XCTAssertGreaterThan(stats.longestStreak, 0)
-        let renderer = ImageRenderer(content: YearStory(stats: stats, format: Format(units: "metric")).frame(width: 820, height: 860))
-        XCTAssertNotNil(renderer.nsImage)
-        let card = ImageRenderer(content: YearSummaryCard(stats: stats, format: Format(units: "metric")).card)
-        XCTAssertNotNil(card.nsImage)
-    }
-}
