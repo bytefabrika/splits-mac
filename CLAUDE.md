@@ -16,7 +16,7 @@ A native macOS app that shows your own Garmin Connect data (activities, sleep, H
 - Explorer (`Views/ExplorerView.swift`, `Store/Countries.swift`): each outdoor activity's start point is matched to a country offline with Natural Earth's 1:50m borders (public domain, `Resources/countries.json`: ISO code, English name, continent, label point, outer rings as flat lon/lat). Points just outside a coarse border snap to the nearest one within ~25 km. The map joins countries in the order you crossed into them.
 - **Time totals use `Activity.activeSeconds`**: moving time for distance sports, the whole session otherwise. Garmin's moving time for padel/strength/yoga is the few minutes the watch saw you travel (a 90-minute padel match shows ~5).
 - Share card (`Views/ShareCard.swift`): 1080×1350, route drawn without a map (privacy). `--card-test < file.zip > card.png`.
-- Weekly report: `Coach.weeklyFacts` + `WeeklyReportCard` on Today, kept per day in UserDefaults.
+- Daily briefing: `Coach.dailyFacts` + `ReportCard` on Today, written once a day after last night's sleep syncs, kept in UserDefaults. The recovery verdict and today's recommendation are decided in code; the on-device model only words them (it can't weigh numbers reliably).
 - Menu bar (`Views/MenuBar.swift`): `LiveToday` fetches today's Body Battery, heart rate, daily summary (stress durations) and steps when the panel opens and every 15 min; nothing stored. Skipped under XCTest.
 - `calendarDate` is **null** on days without data (sleep, HRV…): every DTO field is optional.
 - No published rate limits and no rate headers: `GarminClient` sends one request at a time with a 0.35 s gap, retries 429 with backoff, renews the token once on 401.

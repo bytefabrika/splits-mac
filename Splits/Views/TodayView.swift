@@ -55,7 +55,6 @@ struct TodayView: View {
                                    symbol: "shoeprints.fill", tint: .green, series: days.map { ($0.day, $0.steps.map(Double.init)) })
                     }
 
-                    ReportCard(.weekly, days: allDays, activities: activities)
 
                     Text("Recent activities").font(.headline).padding(.top, 6)
                     VStack(spacing: 0) {
@@ -246,22 +245,21 @@ struct ChartCard<Content: View>: View {
 }
 
 /// "Your week": the coach's check-in on the last 7 days. Kept for the day once written.
-/// A few paragraphs from Apple's on-device model: this morning's briefing, or how the week went.
+/// A few paragraphs from Apple's on-device model: this morning's briefing.
 /// Written once a day and kept until tomorrow.
 struct ReportCard: View {
     enum Kind {
-        case daily, weekly
+        case daily
 
-        var title: String { self == .daily ? "Your day" : "Your week" }
-        var subtitle: String { self == .daily ? "This morning's briefing, written on your Mac" : "The last 7 days, written on your Mac" }
-        var ask: String { self == .daily ? "Brief me on today" : "How did my week go?" }
-        var waiting: String { self == .daily ? "Looking at last night and your training…" : "Looking at your week…" }
-        var symbol: String { self == .daily ? "sun.horizon.fill" : "sparkles" }
-        var colors: [Color] { self == .daily ? [.orange, .pink, .purple] : [.purple, .pink, .orange] }
-        var instructions: String { self == .daily ? Coach.dailyInstructions : Coach.weeklyInstructions }
+        var title: String { "Your day" }
+        var subtitle: String { "This morning's briefing, written on your Mac" }
+        var ask: String { "Brief me on today" }
+        var waiting: String { "Looking at last night and your training…" }
+        var symbol: String { "sun.horizon.fill" }
+        var colors: [Color] { [.orange, .pink, .purple] }
+        var instructions: String { Coach.dailyInstructions }
         func facts(_ activities: [Activity], _ days: [Day], _ format: Format) -> String {
-            self == .daily ? Coach.dailyFacts(activities: activities, days: days, format: format)
-                : Coach.weeklyFacts(activities: activities, days: days, format: format)
+            Coach.dailyFacts(activities: activities, days: days, format: format)
         }
     }
 
@@ -284,7 +282,7 @@ struct ReportCard: View {
         self.days = days
         self.activities = activities
         // "dailyBrief" rather than "daily": a new key, so a briefing in the old tone is written again.
-        let key = kind == .daily ? "dailyBrief" : "weekly"
+        let key = "dailyBrief"
         _savedDate = AppStorage(wrappedValue: "", "\(key)ReportDate")
         _savedText = AppStorage(wrappedValue: "", "\(key)ReportText")
     }

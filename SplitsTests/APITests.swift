@@ -49,26 +49,31 @@ final class APITests: XCTestCase {
 }
 
 final class CoachFactsTests: XCTestCase {
-    func testWeeklyFactsCompareWithUsualWeeks() {
-        let now = Date(timeIntervalSince1970: 1_800_000_000)
-        func run(daysAgo: Double, km: Double, load: Double) -> Activity {
-            let a = Activity(garminId: Int64(daysAgo * 10))
-            a.typeKey = "running"
-            a.start = now.addingTimeInterval(-daysAgo * 86_400)
-            a.distance = km * 1000
-            a.movingDuration = km * 330
-            a.trainingLoad = load
-            return a
+    /// The recovery verdict is decided in code: low HRV and a raised resting heart rate make "partly recovered".
+    func testDailyVerdict() {
+        let calendar = Calendar.current
+        let now = calendar.date(bySettingHour: 8, minute: 0, second: 0, of: Date(timeIntervalSince1970: 1_800_000_000))!
+        func day(_ daysAgo: Int) -> Day {
+            Day(date: GarminDate.string(calendar.date(byAdding: .day, value: -daysAgo, to: now)!))
         }
-        let activities = [run(daysAgo: 1, km: 10, load: 120), run(daysAgo: 3, km: 21, load: 250), run(daysAgo: 12, km: 8, load: 90)]
-        let day = Day(date: GarminDate.string(now.addingTimeInterval(-86_400)))
-        day.sleepSeconds = 25_200
-        day.hrvLastNight = 55
-        let facts = Coach.weeklyFacts(activities: activities, days: [day], format: Format(units: "metric"), now: now)
-        XCTAssertTrue(facts.contains("Activities this week: 2"), facts)
-        XCTAssertTrue(facts.contains("Running: 2×"), facts)
-        XCTAssertTrue(facts.contains("Training load this week 370"), facts)
-        XCTAssertTrue(facts.contains("Average sleep 7 h 0 min"), facts)
-        XCTAssertTrue(facts.contains("Overnight HRV averaged 55"), facts)
+        let today = day(0)
+        today.sleepSeconds = 27_000
+        today.hrvLastNight = 50
+        today.hrvBalancedLow = 60
+        today.hrvBalancedHigh = 90
+        today.restingHR = 60
+        let before = (1...5).map { i -> Day in let d = day(i); d.restingHR = 54; d.sleepSeconds = 27_000; return d }
+        let run = Activity(garminId: 1)
+        run.typeKey = "running"
+        run.start = calendar.date(byAdding: .hour, value: -20, to: now)!
+        run.distance = 10_000
+        run.movingDuration = 3_300
+
+        let facts = Coach.dailyFacts(activities: [run], days: [today] + before, format: Format(units: "metric"), now: now)
+        XCTAssertTrue(facts.contains("Recovery verdict: partly recovered"), facts)
+        XCTAssertTrue(facts.contains("HRV below normal"), facts)
+        XCTAssertTrue(facts.contains("resting heart rate up"), facts)
+        XCTAssertTrue(facts.contains("Recommendation: Keep it easy today"), facts)
+        XCTAssertTrue(facts.contains("Yesterday: Running of 10"), facts)
     }
 }
