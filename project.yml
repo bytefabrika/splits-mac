@@ -27,6 +27,8 @@ targets:
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.healthcare-fitness
         INFOPLIST_KEY_NSHumanReadableCopyright: "© 2026 Bytefabrika"
         CODE_SIGN_ENTITLEMENTS: Splits/Splits.entitlements
+        # FoundationModels exists from macOS 26; the app still runs on 14 without the coach.
+        OTHER_LDFLAGS: "-weak_framework FoundationModels"
   SplitsTests:
     type: bundle.unit-test
     platform: macOS

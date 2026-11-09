@@ -74,10 +74,20 @@ struct TrackAnalysis {
     let splits: [Split]
     let bests: [Best]
 
+    /// A gap between records longer than this is a pause.
+    static let pauseGap: TimeInterval = 15
+
     /// `splitLength`: 1000 m, or 1609.344 m for miles.
     init(_ track: Track, splitLength: Double = 1000, maxSamples: Int = 700) {
         let points = track.points
         let start = points.first?.time ?? Date()
+        // Timer time: the watch stops recording while paused (lights, a coffee), so a long gap between two
+        // records is a pause and doesn't count. Splits and best efforts use this, like the watch's own laps.
+        var active = [Double](repeating: 0, count: points.count)
+        for i in points.indices.dropFirst() {
+            let gap = points[i].time.timeIntervalSince(points[i - 1].time)
+            active[i] = active[i - 1] + (gap > Self.pauseGap ? 0 : max(gap, 0))
+        }
 
         // Charts: an even spread of at most `maxSamples` points.
         let step = max(points.count / maxSamples, 1)
@@ -94,31 +104,33 @@ struct TrackAnalysis {
         let routeStep = max(fixes.count / 2500, 1)
         route = stride(from: 0, to: fixes.count, by: routeStep).map { fixes[$0] }
 
-        // Splits from the distance stream.
+        // Splits from the distance stream, timed with timer time.
         var splits: [Split] = []
-        var splitStart = points.first
+        var splitStart = points.indices.first
         var hrSum = 0.0, hrCount = 0.0, climb = 0.0
         var previousAltitude = points.first?.altitude
-        for p in points {
+        for i in points.indices {
+            let p = points[i]
             if let hr = p.heartRate { hrSum += hr; hrCount += 1 }
             if let a = p.altitude, let prev = previousAltitude, a > prev { climb += a - prev }
             previousAltitude = p.altitude ?? previousAltitude
-            guard let d = p.distance, let s = splitStart, let sd = s.distance else { continue }
+            guard let d = p.distance, let s = splitStart, let sd = points[s].distance else { continue }
             if d - sd >= splitLength {
-                splits.append(Split(id: splits.count + 1, length: d - sd, seconds: p.time.timeIntervalSince(s.time),
+                splits.append(Split(id: splits.count + 1, length: d - sd, seconds: active[i] - active[s],
                                     averageHR: hrCount > 0 ? hrSum / hrCount : nil, climb: climb))
-                splitStart = p
+                splitStart = i
                 hrSum = 0; hrCount = 0; climb = 0
             }
         }
-        if let s = splitStart, let sd = s.distance, let last = points.last, let ld = last.distance, ld - sd > splitLength * 0.1 {
-            splits.append(Split(id: splits.count + 1, length: ld - sd, seconds: last.time.timeIntervalSince(s.time),
+        if let s = splitStart, let sd = points[s].distance, let lastIndex = points.indices.last,
+           let ld = points[lastIndex].distance, ld - sd > splitLength * 0.1 {
+            splits.append(Split(id: splits.count + 1, length: ld - sd, seconds: active[lastIndex] - active[s],
                                 averageHR: hrCount > 0 ? hrSum / hrCount : nil, climb: climb))
         }
         self.splits = splits
 
         // Fastest stretches, with a two-pointer window over the distance stream.
-        let stream = points.compactMap { p in p.distance.map { (d: $0, t: p.time.timeIntervalSince(start)) } }
+        let stream = points.indices.compactMap { i in points[i].distance.map { (d: $0, t: active[i]) } }
         var bests: [Best] = []
         for (label, target) in [("1 km", 1000.0), ("5 km", 5000.0), ("10 km", 10_000.0), ("Half", 21_097.5), ("Marathon", 42_195.0)] {
             guard let total = stream.last?.d, total >= target else { continue }

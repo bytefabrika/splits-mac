@@ -1,5 +1,6 @@
 import Charts
 import MapKit
+import SwiftData
 import SwiftUI
 
 /// The full activity screen: route, charts and splits from the activity file, plus Garmin's summary.
@@ -19,6 +20,7 @@ struct ActivityPage: View {
                 header
                 stats
                 if let analysis {
+                    CoachCard(activity: activity, analysis: analysis)
                     if !analysis.route.isEmpty && !Sport.isIndoor(activity.typeKey) { map(analysis) }
                     charts(analysis)
                     HStack(alignment: .top, spacing: 18) {
@@ -32,6 +34,7 @@ struct ActivityPage: View {
                     }
                 } else if let loadError {
                     Label(loadError, systemImage: "exclamationmark.triangle").foregroundStyle(.secondary)
+                    CoachCard(activity: activity, analysis: nil)
                     HStack(alignment: .top, spacing: 18) { zones; effect }
                 } else {
                     HStack(spacing: 10) {
@@ -366,6 +369,88 @@ struct EffectGauge: View {
             .scaleEffect(1.3)
             .frame(width: 70, height: 70)
             Text(label).font(.caption).foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// "Coach's take": a few paragraphs from Apple's on-device model, written on request and kept with the activity.
+struct CoachCard: View {
+    let activity: Activity
+    let analysis: TrackAnalysis?
+    @Environment(\.modelContext) private var context
+    @Environment(\.format) private var format
+    @State private var text = ""
+    @State private var writing = false
+    @State private var failure: String?
+
+    var body: some View {
+        let status = Coach.status
+        if case .unavailable(let reason) = status, activity.coachNote == nil {
+            if #available(macOS 26, *) {
+                Label(reason, systemImage: "sparkles").font(.caption).foregroundStyle(.secondary)
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Label("Coach's take", systemImage: "sparkles")
+                        .font(.headline)
+                        .foregroundStyle(LinearGradient(colors: [.purple, .pink, .orange], startPoint: .leading, endPoint: .trailing))
+                    Spacer()
+                    Text("Written on your Mac by Apple Intelligence").font(.caption2).foregroundStyle(.secondary)
+                    if activity.coachNote != nil && !writing && status == .ready {
+                        Button { Task { await write() } } label: { Image(systemName: "arrow.clockwise") }
+                            .buttonStyle(.borderless)
+                            .help("Write it again")
+                    }
+                }
+                let shown = writing ? text : (activity.coachNote ?? "")
+                if !shown.isEmpty {
+                    Text(shown)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .animation(.default, value: shown)
+                } else if !writing {
+                    Button {
+                        Task { await write() }
+                    } label: {
+                        Label("What does the coach think?", systemImage: "wand.and.stars")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.purple)
+                }
+                if writing && text.isEmpty {
+                    HStack(spacing: 8) { ProgressView().controlSize(.small); Text("Thinking…").foregroundStyle(.secondary) }
+                }
+                if let failure { Text(failure).font(.caption).foregroundStyle(.orange) }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                LinearGradient(colors: [.purple.opacity(0.12), .pink.opacity(0.08), .orange.opacity(0.06)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                in: RoundedRectangle(cornerRadius: 14)
+            )
+        }
+    }
+
+    private func write() async {
+        writing = true
+        failure = nil
+        text = ""
+        defer { writing = false }
+        let before = activity.start
+        var recentQuery = FetchDescriptor<Activity>(predicate: #Predicate { $0.start < before },
+                                                    sortBy: [SortDescriptor(\.start, order: .reverse)])
+        recentQuery.fetchLimit = 60
+        let recent = (try? context.fetch(recentQuery)) ?? []
+        let date = GarminDate.string(activity.start)
+        let morning = (try? context.fetch(FetchDescriptor<Day>(predicate: #Predicate { $0.date == date })))?.first
+        let facts = Coach.facts(activity: activity, analysis: analysis, recent: recent, morning: morning, format: format)
+        do {
+            try await Coach.write(facts: facts) { text = $0 }
+            activity.coachNote = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            try? context.save()
+        } catch {
+            failure = "Couldn't write a take: \(error.localizedDescription)"
         }
     }
 }

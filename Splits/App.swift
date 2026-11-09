@@ -12,6 +12,8 @@ struct SplitsApp: App {
         if CommandLine.arguments.contains("--sync-test") { DebugSync.run() }
         // `Splits --fit-test < activity.zip` decodes a Garmin download (ZIP or FIT) from stdin.
         if CommandLine.arguments.contains("--fit-test") { DebugSync.fit() }
+        // `Splits --coach-test` writes a take on the newest activity in the real store and prints it. Saves nothing.
+        if CommandLine.arguments.contains("--coach-test") { DebugSync.coach(container: container) }
         #endif
     }
 
@@ -45,11 +47,42 @@ enum DebugSync {
             print("time \(p.first?.time.description ?? "-") → \(p.last?.time.description ?? "-")")
             print("distance \(p.compactMap(\.distance).max() ?? 0) m, max HR \(p.compactMap(\.heartRate).max() ?? 0), altitude \(p.compactMap(\.altitude).min() ?? 0)…\(p.compactMap(\.altitude).max() ?? 0) m")
             if let c = p.first(where: { $0.coordinate != nil })?.coordinate { print(String(format: "first GPS fix %.3f, %.3f", c.latitude, c.longitude)) }
+            let analysis = TrackAnalysis(track)
+            print("our splits: " + analysis.splits.prefix(6).map { Format.duration($0.seconds) }.joined(separator: ", "))
+            print("watch laps: " + track.laps.prefix(6).map { Format.duration($0.moving ?? 0) }.joined(separator: ", "))
+            print("bests: " + analysis.bests.map { "\($0.id) \(Format.duration($0.seconds))" }.joined(separator: ", "))
             print("laps \(track.laps.count): " + track.laps.prefix(3).map { "\(Int($0.distance ?? 0)) m in \(Int($0.moving ?? 0)) s, HR \(Int($0.averageHR ?? 0))" }.joined(separator: " | "))
         } catch {
             print("failed: \(error)")
         }
         exit(0)
+    }
+
+    static func coach(container: ModelContainer) {
+        Task { @MainActor in
+            print("model status: \(Coach.status)")
+            var latest = FetchDescriptor<Activity>(predicate: #Predicate { $0.distance > 1000 }, sortBy: [SortDescriptor(\.start, order: .reverse)])
+            latest.fetchLimit = 1
+            guard let activity = try? container.mainContext.fetch(latest).first else { print("no activities in the store"); exit(0) }
+            var recentQuery = FetchDescriptor<Activity>(sortBy: [SortDescriptor(\.start, order: .reverse)])
+            recentQuery.fetchLimit = 60
+            let recent = (try? container.mainContext.fetch(recentQuery)) ?? []
+            let date = GarminDate.string(activity.start)
+            let morning = (try? container.mainContext.fetch(FetchDescriptor<Day>(predicate: #Predicate { $0.date == date })))?.first
+            let analysis = (try? await Tracks.shared.track(for: activity.garminId)).map { TrackAnalysis($0) }
+            let facts = Coach.facts(activity: activity, analysis: analysis, recent: recent, morning: morning, format: Format(units: "metric"))
+            print("---- facts (\(facts.count) chars) ----\n\(facts)\n---- take ----")
+            let started = Date()
+            var final = ""
+            do {
+                try await Coach.write(facts: facts) { final = $0 }
+                print(final)
+                print("---- \(String(format: "%.1f", Date().timeIntervalSince(started))) s, \(final.split(separator: " ").count) words")
+            } catch {
+                print("failed: \(error)")
+            }
+            exit(0)
+        }
     }
 
     static func run() {

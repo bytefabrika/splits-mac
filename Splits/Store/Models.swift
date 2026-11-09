@@ -30,6 +30,8 @@ final class Activity {
     var maxTemperature: Double?
     /// Seconds in heart rate zones 1–5.
     var hrZones: [Double]
+    /// The on-device model's take on this activity, kept once written.
+    var coachNote: String?
 
     init(garminId: Int64) {
         self.garminId = garminId
