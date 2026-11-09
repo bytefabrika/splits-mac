@@ -47,3 +47,28 @@ final class APITests: XCTestCase {
         XCTAssertEqual(nights[1].sleepTimeSeconds, 27600)
     }
 }
+
+final class CoachFactsTests: XCTestCase {
+    func testWeeklyFactsCompareWithUsualWeeks() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        func run(daysAgo: Double, km: Double, load: Double) -> Activity {
+            let a = Activity(garminId: Int64(daysAgo * 10))
+            a.typeKey = "running"
+            a.start = now.addingTimeInterval(-daysAgo * 86_400)
+            a.distance = km * 1000
+            a.movingDuration = km * 330
+            a.trainingLoad = load
+            return a
+        }
+        let activities = [run(daysAgo: 1, km: 10, load: 120), run(daysAgo: 3, km: 21, load: 250), run(daysAgo: 12, km: 8, load: 90)]
+        let day = Day(date: GarminDate.string(now.addingTimeInterval(-86_400)))
+        day.sleepSeconds = 25_200
+        day.hrvLastNight = 55
+        let facts = Coach.weeklyFacts(activities: activities, days: [day], format: Format(units: "metric"), now: now)
+        XCTAssertTrue(facts.contains("Activities this week: 2"), facts)
+        XCTAssertTrue(facts.contains("Running: 2×"), facts)
+        XCTAssertTrue(facts.contains("Training load this week 370"), facts)
+        XCTAssertTrue(facts.contains("Average sleep 7 h 0 min"), facts)
+        XCTAssertTrue(facts.contains("Overnight HRV averaged 55"), facts)
+    }
+}

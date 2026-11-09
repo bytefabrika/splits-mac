@@ -53,6 +53,8 @@ struct TodayView: View {
                                    symbol: "shoeprints.fill", tint: .green, series: days.map { ($0.day, $0.steps.map(Double.init)) })
                     }
 
+                    WeeklyReportCard(days: allDays, activities: activities)
+
                     Text("Recent activities").font(.headline).padding(.top, 6)
                     VStack(spacing: 0) {
                         ForEach(activities.prefix(6)) { activity in
@@ -238,5 +240,78 @@ struct ChartCard<Content: View>: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.background.secondary, in: RoundedRectangle(cornerRadius: 14))
+    }
+}
+
+/// "Your week": the coach's check-in on the last 7 days. Kept for the day once written.
+struct WeeklyReportCard: View {
+    let days: [Day]
+    let activities: [Activity]
+    @Environment(\.format) private var format
+    @AppStorage("weeklyReportDate") private var savedDate = ""
+    @AppStorage("weeklyReportText") private var savedText = ""
+    @State private var text = ""
+    @State private var writing = false
+    @State private var failure: String?
+    @State private var status: Coach.Status = .unavailable("")
+
+    private var today: String { GarminDate.string(Date()) }
+
+    var body: some View {
+        content.onAppear { status = Coach.status }
+    }
+
+    @ViewBuilder private var content: some View {
+        if status == .ready || (savedDate == today && !savedText.isEmpty) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Label("Your week", systemImage: "sparkles")
+                        .font(.headline)
+                        .foregroundStyle(LinearGradient(colors: [.purple, .pink, .orange], startPoint: .leading, endPoint: .trailing))
+                    Spacer()
+                    Text("The last 7 days, written on your Mac").font(.caption2).foregroundStyle(.secondary)
+                    if savedDate == today && !writing && status == .ready {
+                        Button { Task { await write() } } label: { Image(systemName: "arrow.clockwise") }
+                            .buttonStyle(.borderless)
+                            .help("Write it again")
+                    }
+                }
+                let shown = writing ? text : (savedDate == today ? savedText : "")
+                if !shown.isEmpty {
+                    Text(shown).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                } else if !writing {
+                    Button { Task { await write() } } label: {
+                        Label("How did my week go?", systemImage: "wand.and.stars")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.purple)
+                }
+                if writing && text.isEmpty {
+                    HStack(spacing: 8) { ProgressView().controlSize(.small); Text("Looking at your week…").foregroundStyle(.secondary) }
+                }
+                if let failure { Text(failure).font(.caption).foregroundStyle(.orange) }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                LinearGradient(colors: [.purple.opacity(0.12), .pink.opacity(0.08), .orange.opacity(0.06)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                in: RoundedRectangle(cornerRadius: 14)
+            )
+        }
+    }
+
+    private func write() async {
+        writing = true
+        failure = nil
+        text = ""
+        defer { writing = false }
+        let facts = Coach.weeklyFacts(activities: activities, days: days, format: format)
+        do {
+            try await Coach.write(facts: facts, instructions: Coach.weeklyInstructions) { text = $0 }
+            savedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            savedDate = today
+        } catch {
+            failure = "Couldn't write it: \(error.localizedDescription)"
+        }
     }
 }

@@ -39,7 +39,8 @@ enum Coach {
 
     /// Streams the take. `onText` gets the text so far, on the main actor.
     @MainActor
-    static func write(facts: String, onText: @escaping (String) -> Void) async throws {
+    static func write(facts: String, instructions: String = Coach.instructions,
+                      onText: @escaping (String) -> Void) async throws {
         #if canImport(FoundationModels)
         if #available(macOS 26, *) {
             let session = LanguageModelSession(model: .default, instructions: instructions)
@@ -116,6 +117,74 @@ enum Coach {
             if let rhr = morning.restingHR { parts.append("resting heart rate \(rhr)") }
             if !parts.isEmpty { lines.append("That day: " + parts.joined(separator: "; ") + ".") }
         }
+        return lines.joined(separator: "\n")
+    }
+
+    // MARK: Weekly report
+
+    static let weeklyInstructions = """
+    You are a friendly, knowledgeable endurance coach writing a short weekly check-in for someone who trains with a \
+    Garmin watch. Write plain English: 3 short paragraphs, no headings, no lists, under 170 words.
+    1. How the past 7 days went: volume and the main sessions, compared with their usual weeks when given.
+    2. Recovery: sleep, HRV, resting heart rate and Body Battery, and what the trend suggests.
+    3. One or two concrete suggestions for the coming week.
+    Only use the facts provided; never invent numbers. Be encouraging but honest. No medical advice.
+    """
+
+    /// The last 7 days, compared with the 4 weeks before, as compact facts for the model.
+    static func weeklyFacts(activities: [Activity], days: [Day], format: Format, now: Date = Date()) -> String {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: now)
+        let weekStart = calendar.date(byAdding: .day, value: -7, to: today)!
+        let baseStart = calendar.date(byAdding: .day, value: -35, to: today)!
+        let week = activities.filter { $0.start >= weekStart && $0.start < calendar.date(byAdding: .day, value: 1, to: today)! }
+        let base = activities.filter { $0.start >= baseStart && $0.start < weekStart }
+        var lines = ["Week: \(weekStart.formatted(.dateTime.day().month())) to \(today.formatted(.dateTime.day().month()))"]
+
+        lines.append("Activities this week: \(week.count). Total moving time \(Format.hoursMinutes(Int(week.reduce(0) { $0 + $1.movingDuration }))).")
+        for (sport, items) in Dictionary(grouping: week, by: \.sport).sorted(by: { $0.value.count > $1.value.count }) {
+            let distance = items.reduce(0) { $0 + $1.distance }
+            var line = "- \(sport.label): \(items.count)×"
+            if distance > 0 { line += ", \(format.distance(distance, decimals: 1))" }
+            line += ", \(Format.hoursMinutes(Int(items.reduce(0) { $0 + $1.movingDuration })))"
+            if let longest = items.max(by: { $0.distance < $1.distance }), longest.distance > 0 {
+                line += "; longest \(format.distance(longest.distance))"
+                if let pace = longest.paceSecondsPerKm, [.run, .walk, .hike].contains(sport) { line += " at \(format.pace(secondsPerKm: pace))" }
+            }
+            lines.append(line)
+        }
+        let load = week.compactMap(\.trainingLoad).reduce(0, +)
+        let baseLoad = base.compactMap(\.trainingLoad).reduce(0, +) / 4
+        if load > 0 || baseLoad > 0 {
+            lines.append("Training load this week \(Int(load)); the usual week over the 4 before averaged \(Int(baseLoad)).")
+        }
+        let baseDistance = base.reduce(0) { $0 + $1.distance } / 4
+        if baseDistance > 0 {
+            lines.append("Distance this week \(format.distance(week.reduce(0) { $0 + $1.distance }, decimals: 0)) vs a usual \(format.distance(baseDistance, decimals: 0)).")
+        }
+
+        let weekDays = days.filter { $0.day >= weekStart && $0.day <= today }
+        let baseDays = days.filter { $0.day >= baseStart && $0.day < weekStart }
+        func avg(_ values: [Int]) -> Int? { values.isEmpty ? nil : values.reduce(0, +) / values.count }
+        if let sleep = avg(weekDays.compactMap(\.sleepSeconds)) {
+            var line = "Average sleep \(Format.hoursMinutes(sleep))"
+            if let score = avg(weekDays.compactMap(\.sleepScore)) { line += ", sleep score \(score)" }
+            if let usual = avg(baseDays.compactMap(\.sleepSeconds)) { line += " (usually \(Format.hoursMinutes(usual)))" }
+            lines.append(line + ".")
+        }
+        if let hrv = avg(weekDays.compactMap(\.hrvLastNight)) {
+            var line = "Overnight HRV averaged \(hrv) ms"
+            if let usual = avg(baseDays.compactMap(\.hrvLastNight)) { line += " (usually \(usual))" }
+            if let status = weekDays.last(where: { $0.hrvStatus != nil })?.hrvStatus { line += "; latest status \(Format.title(status).lowercased())" }
+            lines.append(line + ".")
+        }
+        if let rhr = avg(weekDays.compactMap(\.restingHR)) {
+            var line = "Resting heart rate averaged \(rhr)"
+            if let usual = avg(baseDays.compactMap(\.restingHR)) { line += " (usually \(usual))" }
+            lines.append(line + ".")
+        }
+        if let bb = avg(weekDays.compactMap(\.bodyBatteryHigh)) { lines.append("Body Battery peaked at \(bb) on an average day.") }
+        if let stress = avg(weekDays.compactMap(\.stressAvg)) { lines.append("Average stress level \(stress) (0–100).") }
         return lines.joined(separator: "\n")
     }
 }
