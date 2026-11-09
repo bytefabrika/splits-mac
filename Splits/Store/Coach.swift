@@ -39,12 +39,12 @@ enum Coach {
 
     /// Streams the take. `onText` gets the text so far, on the main actor.
     @MainActor
-    static func write(facts: String, instructions: String = Coach.instructions,
+    static func write(facts: String, instructions: String = Coach.instructions, temperature: Double = 0.6,
                       onText: @escaping (String) -> Void) async throws {
         #if canImport(FoundationModels)
         if #available(macOS 26, *) {
             let session = LanguageModelSession(model: .default, instructions: instructions)
-            let stream = session.streamResponse(to: facts, options: GenerationOptions(temperature: 0.6))
+            let stream = session.streamResponse(to: facts, options: GenerationOptions(temperature: temperature))
             for try await snapshot in stream {
                 onText(snapshot.content)
             }
@@ -187,6 +187,130 @@ enum Coach {
         }
         if let bb = avg(weekDays.compactMap(\.bodyBatteryHigh)) { lines.append("Body Battery peaked at \(bb) on an average day.") }
         if let stress = avg(weekDays.compactMap(\.stressAvg)) { lines.append("Average stress level \(stress) (0–100).") }
+        return lines.joined(separator: "\n")
+    }
+
+    // MARK: Daily briefing
+
+    static let dailyInstructions = """
+    You are a friendly, knowledgeable endurance coach writing a short morning briefing for someone who trains with \
+    a Garmin watch. Write plain English: 3 short paragraphs, no headings, no lists, under 130 words.
+    1. How they recovered overnight, following the recovery verdict given and the reasons listed for it.
+    2. What recent training has cost: yesterday's sessions and the past week's load as described.
+    3. Today's recommendation exactly as given, with its reason. Mention the weekly run streak when it's given.
+    The facts already say what is high, low or usual: repeat those judgements, don't make your own. Only use \
+    numbers that appear in the facts. Be warm and direct. No medical advice.
+    """
+
+    /// This morning's numbers against the two weeks before, plus recent training, as compact facts for the model.
+    static func dailyFacts(activities: [Activity], days: [Day], format: Format, now: Date = Date()) -> String {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: now)
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: today)!
+        let twoWeeksAgo = calendar.date(byAdding: .day, value: -14, to: today)!
+        let todayDay = days.first { calendar.isDate($0.day, inSameDayAs: today) }
+        let before = days.filter { $0.day >= twoWeeksAgo && $0.day < today }
+        func avg(_ values: [Int]) -> Int? { values.isEmpty ? nil : values.reduce(0, +) / values.count }
+        var lines = ["Today is \(now.formatted(.dateTime.weekday(.wide).day().month(.wide)))."]
+        // Signals that say "not fully recovered", and ones that say "fresh". The verdict comes from these, here,
+        // not from the model: the small on-device model is good at words, not at weighing numbers.
+        var tired: [String] = [], fresh: [String] = []
+
+        if let d = todayDay {
+            if let sleep = d.sleepSeconds {
+                var line = "Last night: slept \(Format.hoursMinutes(sleep))"
+                if let score = d.sleepScore { line += ", sleep score \(score) out of 100" }
+                if let usual = avg(before.compactMap(\.sleepSeconds)) {
+                    let diff = (sleep - usual) / 60
+                    line += diff >= 30 ? ", \(diff) min more than usual" : diff <= -30 ? ", \(-diff) min less than usual" : ", about their usual"
+                    if diff <= -45 { tired.append("short sleep") } else if diff >= 30 { fresh.append("a long night's sleep") }
+                }
+                if let score = d.sleepScore {
+                    if score < 60 { tired.append("poor sleep score") } else if score >= 80 { fresh.append("good sleep score") }
+                }
+                lines.append(line + ".")
+            } else {
+                lines.append("Last night's sleep hasn't synced yet.")
+            }
+            if let hrv = d.hrvLastNight {
+                var line = "Overnight HRV \(hrv) ms"
+                if let low = d.hrvBalancedLow, let high = d.hrvBalancedHigh {
+                    line += hrv < low ? ", below their normal range of \(low)–\(high)" : hrv > high ? ", above their normal range of \(low)–\(high)" : ", inside their normal range of \(low)–\(high)"
+                    if hrv < low { tired.append("HRV below normal") } else { fresh.append("HRV in its normal range") }
+                }
+                if let status = d.hrvStatus?.lowercased(), status.contains("low") || status.contains("unbalanced") {
+                    line += "; the 7-day HRV status is \(Format.title(status).lowercased())"
+                    if !tired.contains("HRV below normal") { tired.append("HRV status \(Format.title(status).lowercased())") }
+                }
+                lines.append(line + ".")
+            }
+            if let rhr = d.restingHR, let usual = avg(before.compactMap(\.restingHR)) {
+                let diff = rhr - usual
+                lines.append("Resting heart rate \(rhr) bpm, " + (diff >= 3 ? "\(diff) above their usual \(usual)" : diff <= -2 ? "\(-diff) below their usual \(usual)" : "about their usual \(usual)") + ".")
+                if diff >= 3 { tired.append("resting heart rate up") } else if diff <= 0 { fresh.append("resting heart rate normal") }
+            }
+            if let high = d.bodyBatteryHigh {
+                let usual = avg(before.compactMap(\.bodyBatteryHigh))
+                var line = "Body Battery charged to \(high) overnight"
+                if let usual { line += high >= usual + 8 ? ", higher than usual (\(usual))" : high <= usual - 8 ? ", lower than usual (\(usual))" : ", about usual" }
+                lines.append(line + ".")
+                if let usual, high <= usual - 10 || high < 40 { tired.append("low Body Battery") } else if high >= 75 { fresh.append("Body Battery well charged") }
+            }
+        }
+
+        func describe(_ a: Activity) -> String {
+            var text = Format.title(a.typeKey)
+            if a.distance > 0 { text += " of \(format.distance(a.distance))" }
+            text += " (\(Format.duration(a.activeSeconds)))"
+            return text
+        }
+        let todays = activities.filter { $0.start >= today }
+        let yesterdays = activities.filter { $0.start >= yesterday && $0.start < today }
+        lines.append(yesterdays.isEmpty ? "Yesterday: no training." : "Yesterday: " + yesterdays.map(describe).joined(separator: ", ") + ".")
+        if !todays.isEmpty { lines.append("Already done today: " + todays.map(describe).joined(separator: ", ") + ".") }
+
+        let weekStart = calendar.date(byAdding: .day, value: -7, to: today)!
+        let base = activities.filter { $0.start >= calendar.date(byAdding: .day, value: -35, to: today)! && $0.start < weekStart }
+        let week = activities.filter { $0.start >= weekStart && $0.start < today }
+        let load = week.compactMap(\.trainingLoad).reduce(0, +), usualLoad = base.compactMap(\.trainingLoad).reduce(0, +) / 4
+        if usualLoad > 0 {
+            let ratio = load / usualLoad
+            let pct = Int((abs(ratio - 1) * 100).rounded())
+            lines.append("Training over the last 7 days: " + (ratio >= 1.15 ? "\(pct)% more than a usual week (a big week)" : ratio <= 0.85 ? "\(pct)% less than a usual week (a light week)" : "about a usual week") + ".")
+            if ratio >= 1.3 { tired.append("a much bigger week than usual") } else if ratio <= 0.85 { fresh.append("a light week") }
+        }
+        let trainingDays = Set(activities.filter { $0.start < today }.map { calendar.startOfDay(for: $0.start) })
+        var day = yesterday, inRow = 0
+        while trainingDays.contains(day) && inRow < 60 { inRow += 1; day = calendar.date(byAdding: .day, value: -1, to: day)! }
+        if inRow >= 3 { lines.append("They've trained \(inRow) days in a row."); if inRow >= 6 { tired.append("\(inRow) days without a rest day") } }
+        if inRow == 0, let last = activities.first(where: { $0.start < today }) {
+            let gap = calendar.dateComponents([.day], from: calendar.startOfDay(for: last.start), to: today).day ?? 0
+            if gap >= 2 { lines.append("Their last activity was \(gap) days ago."); fresh.append("\(gap) days of rest") }
+        }
+
+        let verdict: String, plan: String
+        switch tired.count {
+        case 0:
+            verdict = "well recovered"
+            plan = "There's room for a harder session today (intervals, tempo or a long run) if they want one."
+        case 1...2:
+            verdict = "partly recovered"
+            plan = "Keep it easy today: an easy run, or a rest day if they feel flat."
+        default:
+            verdict = "not well recovered"
+            plan = "Take a rest day today, or something very light like a walk."
+        }
+        lines.append("Recovery verdict: \(verdict)." + (tired.isEmpty ? "" : " Against: \(tired.joined(separator: ", ")).")
+                     + (fresh.isEmpty ? "" : " For: \(fresh.joined(separator: ", ")).") )
+        lines.append("Recommendation: \(plan)")
+
+        let runs = activities.filter { $0.sport == .run }.map(\.start)
+        let streak = Streaks(dates: runs, today: now, calendar: calendar)
+        if streak.currentWeeks >= 2 {
+            let left = max(0, 3 - streak.thisWeek)
+            lines.append("Run streak: \(streak.currentWeeks) weeks in a row with 3 or more runs. This week: \(streak.thisWeek) so far"
+                         + (left > 0 ? ", \(left) more needed by Sunday." : ", this week's 3 are done."))
+        }
         return lines.joined(separator: "\n")
     }
 }

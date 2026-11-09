@@ -27,6 +27,8 @@ struct SplitsApp: App {
         if CommandLine.arguments.contains("--countries-test") { DebugSync.countries(container: container) }
         // `SPLITS_KEY=… Splits --progress-test` prints aerobic form, streaks, and the bests of the 3 newest outdoor runs.
         if CommandLine.arguments.contains("--progress-test") { DebugSync.progress(container: container) }
+        // `Splits --daily-test` prints this morning's facts and the briefing written from them. Saves nothing.
+        if CommandLine.arguments.contains("--daily-test") { DebugSync.daily(container: container) }
         // `Splits --card-test < activity.zip > card.png`: the share card for the newest activity, with that file's route.
         if CommandLine.arguments.contains("--card-test") { DebugSync.card(container: container) }
         #endif
@@ -182,6 +184,23 @@ enum DebugSync {
                 } catch { print("  \(r.garminId) failed: \(error)") }
             }
             await RecordStore.shared.flush()
+            exit(0)
+        }
+        RunLoop.main.run()
+    }
+
+    static func daily(container: ModelContainer) {
+        let context = ModelContext(container)
+        let activities = (try? context.fetch(FetchDescriptor<Activity>(sortBy: [SortDescriptor(\.start, order: .reverse)]))) ?? []
+        let days = (try? context.fetch(FetchDescriptor<Day>(sortBy: [SortDescriptor(\.date, order: .reverse)]))) ?? []
+        let facts = Coach.dailyFacts(activities: activities, days: days, format: Format(units: "metric"))
+        print(facts + "\n---")
+        Task { @MainActor in
+            do {
+                var last = ""
+                try await Coach.write(facts: facts, instructions: Coach.dailyInstructions, temperature: 0.3) { last = $0 }
+                print(last)
+            } catch { print("Coach: \(error) – \(Coach.status)") }
             exit(0)
         }
         RunLoop.main.run()

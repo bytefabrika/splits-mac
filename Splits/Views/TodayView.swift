@@ -40,6 +40,8 @@ struct TodayView: View {
                     Text(Date(), format: .dateTime.weekday(.wide).day().month(.wide))
                         .font(.title2.bold())
 
+                    ReportCard(.daily, days: allDays, activities: activities)
+
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), spacing: 14)], spacing: 14) {
                         sleepCard
                         hrvCard
@@ -53,7 +55,7 @@ struct TodayView: View {
                                    symbol: "shoeprints.fill", tint: .green, series: days.map { ($0.day, $0.steps.map(Double.init)) })
                     }
 
-                    WeeklyReportCard(days: allDays, activities: activities)
+                    ReportCard(.weekly, days: allDays, activities: activities)
 
                     Text("Recent activities").font(.headline).padding(.top, 6)
                     VStack(spacing: 0) {
@@ -244,32 +246,66 @@ struct ChartCard<Content: View>: View {
 }
 
 /// "Your week": the coach's check-in on the last 7 days. Kept for the day once written.
-struct WeeklyReportCard: View {
+/// A few paragraphs from Apple's on-device model: this morning's briefing, or how the week went.
+/// Written once a day and kept until tomorrow.
+struct ReportCard: View {
+    enum Kind {
+        case daily, weekly
+
+        var title: String { self == .daily ? "Your day" : "Your week" }
+        var subtitle: String { self == .daily ? "This morning's briefing, written on your Mac" : "The last 7 days, written on your Mac" }
+        var ask: String { self == .daily ? "Brief me on today" : "How did my week go?" }
+        var waiting: String { self == .daily ? "Looking at last night and your training…" : "Looking at your week…" }
+        var symbol: String { self == .daily ? "sun.horizon.fill" : "sparkles" }
+        var colors: [Color] { self == .daily ? [.orange, .pink, .purple] : [.purple, .pink, .orange] }
+        var instructions: String { self == .daily ? Coach.dailyInstructions : Coach.weeklyInstructions }
+        func facts(_ activities: [Activity], _ days: [Day], _ format: Format) -> String {
+            self == .daily ? Coach.dailyFacts(activities: activities, days: days, format: format)
+                : Coach.weeklyFacts(activities: activities, days: days, format: format)
+        }
+    }
+
+    let kind: Kind
     let days: [Day]
     let activities: [Activity]
     @Environment(\.format) private var format
-    @AppStorage("weeklyReportDate") private var savedDate = ""
-    @AppStorage("weeklyReportText") private var savedText = ""
+    @AppStorage private var savedDate: String
+    @AppStorage private var savedText: String
     @State private var text = ""
     @State private var writing = false
     @State private var failure: String?
     @State private var status: Coach.Status = .unavailable("")
 
+    init(_ kind: Kind, days: [Day], activities: [Activity]) {
+        self.kind = kind
+        self.days = days
+        self.activities = activities
+        let key = kind == .daily ? "daily" : "weekly"
+        _savedDate = AppStorage(wrappedValue: "", "\(key)ReportDate")
+        _savedText = AppStorage(wrappedValue: "", "\(key)ReportText")
+    }
+
     private var today: String { GarminDate.string(Date()) }
+    /// The briefing waits for last night's sleep to sync, so it isn't written from yesterday's numbers.
+    private var sleepSynced: Bool { days.contains { $0.date == today && $0.sleepSeconds != nil } }
 
     var body: some View {
-        content.onAppear { status = Coach.status }
+        content
+            .onAppear { status = Coach.status }
+            .task(id: "\(status == .ready)-\(sleepSynced)") {
+                if kind == .daily, status == .ready, sleepSynced, savedDate != today, !writing { await write() }
+            }
     }
 
     @ViewBuilder private var content: some View {
         if status == .ready || (savedDate == today && !savedText.isEmpty) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Label("Your week", systemImage: "sparkles")
+                    Label(kind.title, systemImage: kind.symbol)
                         .font(.headline)
-                        .foregroundStyle(LinearGradient(colors: [.purple, .pink, .orange], startPoint: .leading, endPoint: .trailing))
+                        .foregroundStyle(LinearGradient(colors: kind.colors, startPoint: .leading, endPoint: .trailing))
                     Spacer()
-                    Text("The last 7 days, written on your Mac").font(.caption2).foregroundStyle(.secondary)
+                    Text(kind.subtitle).font(.caption2).foregroundStyle(.secondary)
                     if savedDate == today && !writing && status == .ready {
                         Button { Task { await write() } } label: { Image(systemName: "arrow.clockwise") }
                             .buttonStyle(.borderless)
@@ -280,21 +316,25 @@ struct WeeklyReportCard: View {
                 if !shown.isEmpty {
                     Text(shown).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
                 } else if !writing {
-                    Button { Task { await write() } } label: {
-                        Label("How did my week go?", systemImage: "wand.and.stars")
+                    HStack(spacing: 12) {
+                        Button { Task { await write() } } label: { Label(kind.ask, systemImage: "wand.and.stars") }
+                            .buttonStyle(.borderedProminent)
+                            .tint(kind.colors[0])
+                        if kind == .daily && !sleepSynced {
+                            Text("Last night's sleep hasn't synced yet; it writes itself once it has.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.purple)
                 }
                 if writing && text.isEmpty {
-                    HStack(spacing: 8) { ProgressView().controlSize(.small); Text("Looking at your week…").foregroundStyle(.secondary) }
+                    HStack(spacing: 8) { ProgressView().controlSize(.small); Text(kind.waiting).foregroundStyle(.secondary) }
                 }
                 if let failure { Text(failure).font(.caption).foregroundStyle(.orange) }
             }
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                LinearGradient(colors: [.purple.opacity(0.12), .pink.opacity(0.08), .orange.opacity(0.06)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                LinearGradient(colors: kind.colors.map { $0.opacity(0.1) }, startPoint: .topLeading, endPoint: .bottomTrailing),
                 in: RoundedRectangle(cornerRadius: 14)
             )
         }
@@ -305,9 +345,9 @@ struct WeeklyReportCard: View {
         failure = nil
         text = ""
         defer { writing = false }
-        let facts = Coach.weeklyFacts(activities: activities, days: days, format: format)
+        let facts = kind.facts(activities, days, format)
         do {
-            try await Coach.write(facts: facts, instructions: Coach.weeklyInstructions) { text = $0 }
+            try await Coach.write(facts: facts, instructions: kind.instructions, temperature: kind == .daily ? 0.3 : 0.6) { text = $0 }
             savedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
             savedDate = today
         } catch {
