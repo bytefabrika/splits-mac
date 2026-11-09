@@ -25,6 +25,8 @@ struct SplitsApp: App {
         if CommandLine.arguments.contains("--map-test") { DebugSync.map() }
         // `Splits --countries-test` prints the countries of the activities in the real store.
         if CommandLine.arguments.contains("--countries-test") { DebugSync.countries(container: container) }
+        // `SPLITS_KEY=… Splits --progress-test` prints aerobic form, streaks, and the bests of the 3 newest outdoor runs.
+        if CommandLine.arguments.contains("--progress-test") { DebugSync.progress(container: container) }
         // `Splits --card-test < activity.zip > card.png`: the share card for the newest activity, with that file's route.
         if CommandLine.arguments.contains("--card-test") { DebugSync.card(container: container) }
         #endif
@@ -153,6 +155,36 @@ enum DebugSync {
         for y in t.years { print("  \(y.year): \(y.countries.map(\.name).joined(separator: ", "))") }
         print("  \(t.legs.count) crossings")
         exit(0)
+    }
+
+    static func progress(container: ModelContainer) {
+        let context = ModelContext(container)
+        let all = (try? context.fetch(FetchDescriptor<Activity>(sortBy: [SortDescriptor(\.start, order: .reverse)]))) ?? []
+        let days = (try? context.fetch(FetchDescriptor<Day>())) ?? []
+        let resting = days.compactMap(\.restingHR).sorted()
+        let format = Format(units: "metric")
+        let form = AerobicForm(runs: all, resting: resting.isEmpty ? nil : Double(resting[resting.count / 2]))
+        print("Form: \(form.points.count) runs, reference \(form.reference) bpm, resting \(Int(form.resting))")
+        for months in [0, 3, 6, 12, 24, 36] {
+            let d = Calendar.current.date(byAdding: .month, value: -months, to: Date())!
+            print("  \(months) months ago: \(form.trend(at: d).map { format.pace(secondsPerKm: $0) } ?? "–")")
+        }
+        let s = Streaks(dates: all.map(\.start))
+        print("Streaks: \(s.currentDays) days now, longest \(s.longestDays) (ended \(s.longestDaysEnd.map { GarminDate.string($0) } ?? "–")); \(s.currentWeeks) weeks with 3+, longest \(s.longestWeeks); this week \(s.thisWeek), best week \(s.bestWeek)")
+        let runs = Array(Records.candidates(all).prefix(3))
+        Task {
+            for r in runs {
+                let started = Date()
+                do {
+                    try await RecordStore.shared.find(r.garminId)
+                    let bests = await RecordStore.shared.all()[r.garminId] ?? [:]
+                    print("  \(r.name) \(format.distance(r.distance)) (\(String(format: "%.1f", Date().timeIntervalSince(started))) s): " + Records.distances.compactMap { d in bests[d.label].map { "\(d.label) \(Format.duration($0))" } }.joined(separator: ", "))
+                } catch { print("  \(r.garminId) failed: \(error)") }
+            }
+            await RecordStore.shared.flush()
+            exit(0)
+        }
+        RunLoop.main.run()
     }
 
     static func card(container: ModelContainer) {

@@ -16,7 +16,9 @@ actor Tracks {
         self.folder = folder
     }
 
-    func track(for id: Int64) async throws -> Track {
+    /// `keep: false` reads a saved file if there is one but doesn't save a new download (for the record
+    /// finder, which goes through every run once and only needs the best efforts).
+    func track(for id: Int64, keep: Bool = true) async throws -> Track {
         if let cached = memory[id] { return cached }
         let file = folder.appendingPathComponent("\(id).fit")
         let fit: Data
@@ -27,11 +29,13 @@ actor Tracks {
             fit = download.prefix(4) == Data([0x50, 0x4B, 0x03, 0x04])
                 ? try Zip.entries(download).first { $0.name.lowercased().hasSuffix(".fit") }?.data ?? Data()
                 : download
-            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            try fit.write(to: file, options: .atomic)
+            if keep {
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                try fit.write(to: file, options: .atomic)
+            }
         }
         let track = try FIT.decode(fit)
-        memory[id] = track
+        if keep { memory[id] = track }
         return track
     }
 
