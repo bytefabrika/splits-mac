@@ -10,6 +10,10 @@ struct SplitsApp: App {
 
     init() {
         container = try! ModelContainer(for: Activity.self, Day.self)
+        // The heatmap's route files, from before the Explorer replaced it.
+        if let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+            try? FileManager.default.removeItem(at: support.appendingPathComponent("Routes", isDirectory: true))
+        }
         #if DEBUG
         // `SPLITS_KEY=… Splits --sync-test` runs a full sync into a throwaway store and prints what came back.
         if CommandLine.arguments.contains("--sync-test") { DebugSync.run() }
@@ -19,8 +23,8 @@ struct SplitsApp: App {
         if CommandLine.arguments.contains("--coach-test") { DebugSync.coach(container: container) }
         // `Splits --map-test < activity.zip > map.png`: the still map with the route drawn on, to check they line up.
         if CommandLine.arguments.contains("--map-test") { DebugSync.map() }
-        // `SPLITS_KEY=… Splits --routes-test` builds routes for the 10 newest outdoor activities in the store.
-        if CommandLine.arguments.contains("--routes-test") { DebugSync.routes(container: container) }
+        // `Splits --countries-test` prints the countries of the activities in the real store.
+        if CommandLine.arguments.contains("--countries-test") { DebugSync.countries(container: container) }
         // `Splits --card-test < activity.zip > card.png`: the share card for the newest activity, with that file's route.
         if CommandLine.arguments.contains("--card-test") { DebugSync.card(container: container) }
         #endif
@@ -136,23 +140,19 @@ enum DebugSync {
         }
     }
 
-    static func routes(container: ModelContainer) {
-        Task { @MainActor in
-            let all = (try? container.mainContext.fetch(FetchDescriptor<Activity>(sortBy: [SortDescriptor(\.start, order: .reverse)]))) ?? []
-            let withCoordinates = all.filter { $0.startLatitude != nil }.count
-            let picked = Array(all.filter { $0.distance > 0 && !Sport.isIndoor($0.typeKey) && [.run, .ride].contains($0.sport) }.prefix(10))
-            print("activities \(all.count), with start coordinates \(withCoordinates), picked \(picked.count)")
-            let started = Date()
-            for a in picked {
-                do { try await RouteStore.shared.build(a.garminId) } catch { print("  \(a.garminId) failed: \(error)") }
-            }
-            let routes = await RouteStore.shared.load(picked.map(\.garminId))
-            for a in picked {
-                print("  \(a.typeKey) \(Int(a.distance)) m → \(routes[a.garminId]?.count ?? 0) points")
-            }
-            print("took \(String(format: "%.1f", Date().timeIntervalSince(started))) s")
-            exit(0)
+    static func countries(container: ModelContainer) {
+        let all = (try? ModelContext(container).fetch(FetchDescriptor<Activity>())) ?? []
+        let points = all.compactMap { a -> Travels.Point? in
+            guard !Sport.isIndoor(a.typeKey), let lat = a.startLatitude, let lon = a.startLongitude else { return nil }
+            return Travels.Point(id: a.garminId, start: a.start, lat: lat, lon: lon, distance: a.distance)
         }
+        let started = Date()
+        let t = Travels(points: points)
+        print("\(all.count) activities, \(points.count) with a start point, \(t.located) placed in \(String(format: "%.2f", Date().timeIntervalSince(started))) s")
+        for v in t.visits { print("  \(v.country.flag) \(v.country.name): \(v.count)×, first \(GarminDate.string(v.first))") }
+        for y in t.years { print("  \(y.year): \(y.countries.map(\.name).joined(separator: ", "))") }
+        print("  \(t.legs.count) crossings")
+        exit(0)
     }
 
     static func card(container: ModelContainer) {

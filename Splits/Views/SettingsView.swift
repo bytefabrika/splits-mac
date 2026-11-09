@@ -40,7 +40,7 @@ struct SettingsView: View {
                 try? context.save()
                 UserDefaults.standard.removeObject(forKey: "lastSync")
                 UserDefaults.standard.removeObject(forKey: "welcomed")
-                Task { await Tracks.shared.removeAll(); await RouteStore.shared.removeAll() }
+                Task { await Tracks.shared.removeAll() }
                 UserDefaults.standard.removeObject(forKey: "coordinatesBackfilled")
                 NotificationCenter.default.post(name: .splitsKeyRemoved, object: nil)
             }

@@ -1,0 +1,227 @@
+import Charts
+import MapKit
+import SwiftData
+import SwiftUI
+
+/// Every country you've been active in, coloured on a world map and joined up in the order you went,
+/// with how many countries each year.
+struct ExplorerView: View {
+    enum SportFilter: String, CaseIterable, Identifiable {
+        case run = "Running", ride = "Cycling", all = "Everything"
+        var id: String { rawValue }
+        func includes(_ sport: Sport) -> Bool {
+            switch self {
+            case .run: sport == .run
+            case .ride: sport == .ride
+            case .all: true
+            }
+        }
+    }
+
+    @Query(sort: \Activity.start, order: .reverse) private var activities: [Activity]
+    @Environment(\.format) private var format
+    @State private var filter: SportFilter = .run
+    @State private var travels = Travels()
+    @State private var loading = true
+    /// A year picked in the list: the map shows only that year's countries and trips.
+    @State private var year: Int?
+    @State private var camera: MapCameraPosition = .automatic
+
+    private var color: Color { filter == .ride ? Sport.ride.color : filter == .run ? Sport.run.color : .accentColor }
+
+    private var shownCountries: [Country] {
+        if let year, let y = travels.years.first(where: { $0.year == year }) { return y.countries }
+        return travels.visits.map(\.country)
+    }
+
+    /// Each pair of countries once, however often you went back and forth.
+    private var shownLegs: [(from: Country, to: Country, date: Date)] {
+        let legs = year.map { y in travels.legs.filter { Calendar.current.component(.year, from: $0.date) == y } } ?? travels.legs
+        var seen = Set<String>()
+        return legs.filter { seen.insert([$0.from.id, $0.to.id].sorted().joined(separator: "-")).inserted }
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            map
+            Divider()
+            panel.frame(width: 330)
+        }
+        .navigationTitle("Explorer")
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Picker("Sport", selection: $filter) {
+                    ForEach(SportFilter.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .fixedSize()
+            }
+        }
+        .task(id: "\(filter.rawValue)-\(activities.count)") { await reload() }
+        .onChange(of: year) { withAnimation { camera = .automatic } }
+    }
+
+    private func reload() async {
+        let points = activities.compactMap { a -> Travels.Point? in
+            guard filter.includes(a.sport), !Sport.isIndoor(a.typeKey),
+                  let lat = a.startLatitude, let lon = a.startLongitude, lat != 0 || lon != 0 else { return nil }
+            return Travels.Point(id: a.garminId, start: a.start, lat: lat, lon: lon, distance: a.distance)
+        }
+        let result = await Task.detached(priority: .userInitiated) { Travels(points: points) }.value
+        travels = result
+        loading = false
+        if let year, !result.years.contains(where: { $0.year == year }) { self.year = nil }
+        camera = .automatic
+    }
+
+    // MARK: Map
+
+    private var map: some View {
+        Map(position: $camera) {
+            ForEach(shownCountries) { c in
+                ForEach(c.rings.indices, id: \.self) { i in
+                    MapPolygon(coordinates: c.rings[i])
+                        .foregroundStyle(color.opacity(0.45))
+                        .stroke(color, lineWidth: 1)
+                }
+            }
+            ForEach(shownLegs.indices, id: \.self) { i in
+                let leg = shownLegs[i]
+                MapPolyline(MKGeodesicPolyline(coordinates: [leg.from.label, leg.to.label], count: 2))
+                    .stroke(.white.opacity(0.75), style: StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: [5, 4]))
+            }
+            ForEach(shownCountries) { c in
+                Annotation(c.name, coordinate: c.label, anchor: .center) {
+                    Text(c.flag)
+                        .font(.system(size: 22))
+                        .padding(3)
+                        .background(Circle().fill(.black.opacity(0.55)))
+                }
+                .annotationTitles(.hidden)
+            }
+        }
+        .mapStyle(.imagery(elevation: .flat))
+        .overlay {
+            if !loading && travels.visits.isEmpty {
+                ContentUnavailableView("No places yet", systemImage: "globe.europe.africa",
+                                       description: Text("Outdoor activities with GPS show up here once they've synced."))
+                    .padding(30)
+                    .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 16))
+            }
+        }
+    }
+
+    // MARK: Panel
+
+    private var panel: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                header
+                if !travels.years.isEmpty { perYearChart }
+                yearsList
+                if !travels.visits.isEmpty { allCountries }
+            }
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Explorer").font(.system(size: 13, weight: .heavy)).tracking(1.5).foregroundStyle(color)
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("\(travels.visits.count)")
+                    .font(.system(size: 56, weight: .heavy, design: .rounded))
+                    .contentTransition(.numericText())
+                Text(travels.visits.count == 1 ? "country" : "countries").font(.title2.weight(.bold))
+            }
+            Text("\(travels.continents.count) \(travels.continents.count == 1 ? "continent" : "continents") · \(travels.legs.count) border crossings")
+                .foregroundStyle(.secondary)
+            if let first = travels.visits.first {
+                Text("Started in \(first.country.flag) \(first.country.name), \(first.first.formatted(.dateTime.month(.wide).year()))")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var perYearChart: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Countries per year").font(.headline)
+            Chart(travels.years) { y in
+                BarMark(x: .value("Year", String(y.year)), y: .value("Countries", y.countries.count))
+                    .foregroundStyle(year == nil || year == y.year ? color : color.opacity(0.3))
+                    .annotation(position: .top) {
+                        Text("\(y.countries.count)").font(.caption.bold()).monospacedDigit()
+                    }
+            }
+            .chartXScale(domain: travels.years.map { String($0.year) }.reversed())
+            .chartYAxis(.hidden)
+            .frame(height: 140)
+        }
+    }
+
+    private var yearsList: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("By year").font(.headline)
+                Spacer()
+                if year != nil { Button("Show all") { year = nil }.buttonStyle(.link) }
+            }
+            ForEach(travels.years) { y in
+                Button {
+                    year = year == y.year ? nil : y.year
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text(String(y.year)).font(.title3.weight(.heavy)).monospacedDigit()
+                            Spacer()
+                            Text("\(y.countries.count) \(y.countries.count == 1 ? "country" : "countries")")
+                                .font(.callout.weight(.semibold))
+                            if !y.new.isEmpty {
+                                Text("+\(y.new.count) new")
+                                    .font(.caption.bold())
+                                    .padding(.horizontal, 6).padding(.vertical, 2)
+                                    .background(color.opacity(0.25), in: Capsule())
+                            }
+                        }
+                        Text(y.countries.map(\.flag).joined(separator: " "))
+                            .font(.title3)
+                            .lineLimit(3)
+                            .help(y.countries.map(\.name).joined(separator: ", "))
+                    }
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 10)
+                        .fill(year == y.year ? color.opacity(0.18) : Color.primary.opacity(0.04)))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var allCountries: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Every country, in the order you got there").font(.headline)
+            ForEach(Array(travels.visits.enumerated()), id: \.element.id) { i, v in
+                HStack(spacing: 8) {
+                    Text("\(i + 1)").font(.caption.monospacedDigit()).foregroundStyle(.secondary).frame(width: 22, alignment: .trailing)
+                    Text(v.country.flag)
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(v.country.name).font(.callout.weight(.semibold))
+                        Text(v.first.formatted(.dateTime.day().month(.abbreviated).year()))
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: 0) {
+                        Text("\(v.count)×").font(.callout.monospacedDigit())
+                        if v.distance > 0 {
+                            Text(format.distance(v.distance, decimals: 0)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
