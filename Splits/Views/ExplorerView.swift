@@ -26,6 +26,12 @@ struct ExplorerView: View {
     /// A year picked in the list: the map shows only that year's countries and trips.
     @State private var year: Int?
     @State private var camera: MapCameraPosition = .automatic
+    /// Where the map is looking now, so the mouse wheel can zoom from there.
+    @State private var region: MKCoordinateRegion?
+    @State private var hovering = false
+    @State private var wheel: Any?
+    /// The shapes for the countries on the map, worked out when they change rather than on every frame.
+    @State private var shapes: [[CLLocationCoordinate2D]] = []
 
     private var color: Color { filter == .ride ? Sport.ride.color : filter == .run ? Sport.run.color : .accentColor }
 
@@ -58,7 +64,10 @@ struct ExplorerView: View {
             }
         }
         .task(id: "\(filter.rawValue)-\(activities.count)") { await reload() }
-        .onChange(of: year) { withAnimation { camera = .automatic } }
+        .onChange(of: year) {
+            shapes = shownCountries.flatMap(\.drawnRings)
+            withAnimation { camera = .automatic }
+        }
     }
 
     private func reload() async {
@@ -69,6 +78,7 @@ struct ExplorerView: View {
         }
         let result = await Task.detached(priority: .userInitiated) { Travels(points: points) }.value
         travels = result
+        shapes = shownCountries.flatMap(\.drawnRings)
         loading = false
         if let year, !result.years.contains(where: { $0.year == year }) { self.year = nil }
         camera = .automatic
@@ -78,12 +88,10 @@ struct ExplorerView: View {
 
     private var map: some View {
         Map(position: $camera) {
-            ForEach(shownCountries) { c in
-                ForEach(c.rings.indices, id: \.self) { i in
-                    MapPolygon(coordinates: c.rings[i])
-                        .foregroundStyle(color.opacity(0.45))
-                        .stroke(color, lineWidth: 1)
-                }
+            ForEach(shapes.indices, id: \.self) { i in
+                MapPolygon(coordinates: shapes[i])
+                    .foregroundStyle(color.opacity(0.45))
+                    .stroke(color, lineWidth: 1)
             }
             ForEach(shownLegs.indices, id: \.self) { i in
                 let leg = shownLegs[i]
@@ -101,6 +109,15 @@ struct ExplorerView: View {
             }
         }
         .mapStyle(.imagery(elevation: .flat))
+        .mapControls {
+            MapZoomStepper()
+            MapCompass()
+            MapScaleView()
+        }
+        .onMapCameraChange(frequency: .continuous) { region = $0.region }
+        .onHover { hovering = $0 }
+        .onAppear { startWheelZoom() }
+        .onDisappear { if let wheel { NSEvent.removeMonitor(wheel) }; wheel = nil }
         .overlay {
             if !loading && travels.visits.isEmpty {
                 ContentUnavailableView("No places yet", systemImage: "globe.europe.africa",
@@ -108,6 +125,19 @@ struct ExplorerView: View {
                     .padding(30)
                     .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 16))
             }
+        }
+    }
+
+    /// A mouse wheel zooms, like on a web map. A trackpad keeps its own gestures: pinch to zoom, two fingers to move.
+    private func startWheelZoom() {
+        guard wheel == nil else { return }
+        wheel = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
+            guard hovering, !event.hasPreciseScrollingDeltas, event.scrollingDeltaY != 0, let region else { return event }
+            let factor = pow(1.3, -max(-4, min(4, event.scrollingDeltaY)))
+            let span = MKCoordinateSpan(latitudeDelta: min(160, max(0.01, region.span.latitudeDelta * factor)),
+                                        longitudeDelta: min(340, max(0.01, region.span.longitudeDelta * factor)))
+            camera = .region(MKCoordinateRegion(center: region.center, span: span))
+            return nil
         }
     }
 

@@ -14,6 +14,13 @@ struct Country: Identifiable, Hashable {
 
     var id: String { iso == "-99" ? name : iso }
 
+    /// The rings worth drawing on a world map: islets too small to see are left out (the largest ring always stays).
+    var drawnRings: [[CLLocationCoordinate2D]] {
+        let areas = rings.indices.map(ringArea)
+        let largest = areas.max() ?? 0
+        return rings.indices.filter { areas[$0] >= 0.02 || areas[$0] == largest }.map { rings[$0] }
+    }
+
     /// 🇳🇱 from "NL"; a globe for places without a code.
     var flag: String {
         guard iso.count == 2 else { return "🏳️" }
@@ -45,7 +52,7 @@ struct Country: Identifiable, Hashable {
         return inside
     }
 
-    fileprivate func ringArea(_ i: Int) -> Double {
+    func ringArea(_ i: Int) -> Double {
         let b = boxes[i]
         return (b.maxLat - b.minLat) * (b.maxLon - b.minLon)
     }
