@@ -15,7 +15,7 @@ struct Format {
     var distanceUnit: String { imperial ? "mi" : "km" }
 
     func elevation(_ metres: Double) -> String {
-        imperial ? "\(Int((metres / 0.3048).rounded())) ft" : "\(Int(metres.rounded())) m"
+        imperial ? "\(Int((metres / 0.3048).rounded()).formatted()) ft" : "\(Int(metres.rounded()).formatted()) m"
     }
 
     /// Pace per km or mile: "5:12 /km".

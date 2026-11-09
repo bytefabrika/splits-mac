@@ -86,7 +86,7 @@ struct ShareCard: View {
     private var stats: [(String, String)] {
         var items: [(String, String)] = []
         if activity.distance > 0 { items.append(("Distance", format.distance(activity.distance))) }
-        items.append(("Time", Format.duration(activity.movingDuration)))
+        items.append(("Time", Format.duration(activity.activeSeconds)))
         if [.run, .walk, .hike].contains(sport), let pace = activity.paceSecondsPerKm {
             items.append(("Pace", format.pace(secondsPerKm: pace).replacingOccurrences(of: " ", with: "")))
         } else if let speed = activity.averageSpeed, speed > 0 {

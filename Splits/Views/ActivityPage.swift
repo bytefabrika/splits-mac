@@ -152,7 +152,7 @@ struct ActivityPage: View {
                         Text(format.distance(activity.distance, decimals: 2))
                             .font(.system(size: 40, weight: .heavy, design: .rounded)).monospacedDigit()
                     }
-                    Text(Format.duration(activity.movingDuration))
+                    Text(Format.duration(activity.activeSeconds))
                         .font(.system(size: 22, weight: .bold, design: .rounded)).monospacedDigit().opacity(0.9)
                 }
             }
@@ -221,7 +221,7 @@ struct StatGroups: View {
         let a = activity, d = detail
         var overview: [(String, String)] = []
         if a.distance > 0 { overview.append(("Distance", format.distance(a.distance))) }
-        overview.append(("Moving time", Format.duration(a.movingDuration)))
+        overview.append(a.sport.isDistanceSport ? ("Moving time", Format.duration(a.movingDuration)) : ("Time", Format.duration(a.duration)))
         if isPaceSport, let pace = a.paceSecondsPerKm {
             overview.append(("Avg pace", format.pace(secondsPerKm: pace)))
             if let gap = d?.avgGradeAdjustedSpeed, gap > 0 { overview.append(("Grade-adjusted", format.pace(secondsPerKm: 1000 / gap))) }
@@ -229,7 +229,7 @@ struct StatGroups: View {
             overview.append(("Avg speed", format.speed(metresPerSecond: speed)))
         }
         if a.elevationGain > 0 && !Sport.isIndoor(a.typeKey) { overview.append(("Climb", format.elevation(a.elevationGain))) }
-        if a.duration - a.movingDuration > 60 { overview.append(("Stopped", Format.duration(a.duration - a.movingDuration))) }
+        if a.sport.isDistanceSport, a.duration - a.movingDuration > 60 { overview.append(("Stopped", Format.duration(a.duration - a.movingDuration))) }
         if let c = a.calories { overview.append(("Calories", "\(Int(c)) kcal")) }
 
         var effort: [(String, String)] = []

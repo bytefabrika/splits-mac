@@ -67,7 +67,9 @@ enum Coach {
         lines.append("Workout: \(Format.title(activity.typeKey)) on \(activity.start.formatted(.dateTime.weekday(.wide).day().month(.wide).hour().minute()))"
                      + (activity.name.isEmpty ? "" : ", named \"\(activity.name)\""))
         if activity.distance > 0 { lines.append("Distance: \(format.distance(activity.distance))") }
-        lines.append("Moving time: \(Format.duration(activity.movingDuration)) (elapsed \(Format.duration(activity.duration)))")
+        lines.append(activity.sport.isDistanceSport
+                     ? "Moving time: \(Format.duration(activity.movingDuration)) (elapsed \(Format.duration(activity.duration)))"
+                     : "Duration: \(Format.duration(activity.duration))")
         if let p = paceOrSpeed(activity) { lines.append((paceLike ? "Average pace: " : "Average speed: ") + p) }
         if activity.elevationGain > 0 && !Sport.isIndoor(activity.typeKey) { lines.append("Climb: \(format.elevation(activity.elevationGain))") }
         if Sport.isIndoor(activity.typeKey) { lines.append("Indoors (treadmill, trainer or similar).") }
@@ -141,12 +143,12 @@ enum Coach {
         let base = activities.filter { $0.start >= baseStart && $0.start < weekStart }
         var lines = ["Week: \(weekStart.formatted(.dateTime.day().month())) to \(today.formatted(.dateTime.day().month()))"]
 
-        lines.append("Activities this week: \(week.count). Total moving time \(Format.hoursMinutes(Int(week.reduce(0) { $0 + $1.movingDuration }))).")
+        lines.append("Activities this week: \(week.count). Total time \(Format.hoursMinutes(Int(week.reduce(0) { $0 + $1.activeSeconds }))).")
         for (sport, items) in Dictionary(grouping: week, by: \.sport).sorted(by: { $0.value.count > $1.value.count }) {
             let distance = items.reduce(0) { $0 + $1.distance }
             var line = "- \(sport.label): \(items.count)×"
             if distance > 0 { line += ", \(format.distance(distance, decimals: 1))" }
-            line += ", \(Format.hoursMinutes(Int(items.reduce(0) { $0 + $1.movingDuration })))"
+            line += ", \(Format.hoursMinutes(Int(items.reduce(0) { $0 + $1.activeSeconds })))"
             if let longest = items.max(by: { $0.distance < $1.distance }), longest.distance > 0 {
                 line += "; longest \(format.distance(longest.distance))"
                 if let pace = longest.paceSecondsPerKm, [.run, .walk, .hike].contains(sport) { line += " at \(format.pace(secondsPerKm: pace))" }

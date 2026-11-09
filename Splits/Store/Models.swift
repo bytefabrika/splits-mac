@@ -51,6 +51,10 @@ final class Activity {
     }
 
     var sport: Sport { Sport(typeKey: typeKey) }
+    /// Time to count for totals: moving time where moving is the point (run, ride, swim…), the whole session
+    /// otherwise. Garmin's "moving" time for padel or strength is the few minutes the watch saw you travel:
+    /// a 90-minute match shows about 5.
+    var activeSeconds: Double { sport.isDistanceSport ? movingDuration : duration }
     /// Seconds per km, for sports where pace makes sense.
     var paceSecondsPerKm: Double? { distance > 0 && movingDuration > 0 ? movingDuration / (distance / 1000) : nil }
 
@@ -164,6 +168,8 @@ enum Sport: String, CaseIterable, Identifiable {
         case .other: "figure.mixed.cardio"
         }
     }
+
+    var isDistanceSport: Bool { [.run, .ride, .swim, .walk, .hike, .water, .snow].contains(self) }
 
     var color: Color {
         switch self {

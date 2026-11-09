@@ -42,7 +42,7 @@ struct ActivitiesView: View {
                 Text(a.distance > 0 ? format.distance(a.distance) : "–").monospacedDigit()
             }
             .width(80)
-            TableColumn("Time", value: \.movingDuration) { a in Text(Format.duration(a.movingDuration)).monospacedDigit() }
+            TableColumn("Time", value: \.activeSeconds) { a in Text(Format.duration(a.activeSeconds)).monospacedDigit() }
                 .width(70)
             TableColumn("Pace") { a in Text(paceOrSpeed(a)).monospacedDigit() }
                 .width(85)
@@ -87,7 +87,7 @@ struct ActivitiesView: View {
 
     private func summary(_ list: [Activity]) -> String {
         let distance = list.reduce(0) { $0 + $1.distance }
-        let time = list.reduce(0) { $0 + $1.movingDuration }
+        let time = list.reduce(0) { $0 + $1.activeSeconds }
         return "\(list.count) activities · \(format.distance(distance, decimals: 0)) · \(Int(time / 3600)) h"
     }
 }
@@ -106,7 +106,7 @@ struct ActivityRow: View {
             }
             Spacer()
             if activity.distance > 0 { Text(format.distance(activity.distance)).monospacedDigit() }
-            Text(Format.duration(activity.movingDuration)).monospacedDigit().foregroundStyle(.secondary).frame(width: 70, alignment: .trailing)
+            Text(Format.duration(activity.activeSeconds)).monospacedDigit().foregroundStyle(.secondary).frame(width: 70, alignment: .trailing)
         }
         .padding(.vertical, 8)
     }
