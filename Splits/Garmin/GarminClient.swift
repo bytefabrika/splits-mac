@@ -33,7 +33,13 @@ actor GarminClient {
     private var lastRequest = Date.distantPast
 
     /// The app's client. One instance, so its gap between requests applies to everything.
-    static let shared = GarminClient()
+    static let shared: GarminClient = {
+        #if DEBUG
+        // Debug command-line tests pass the key in the environment instead of reading the keychain.
+        if let key = ProcessInfo.processInfo.environment["SPLITS_KEY"] { return GarminClient(key: { key }) }
+        #endif
+        return GarminClient()
+    }()
 
     init(key: @escaping () -> String? = Keychain.readKey, session: URLSession = .shared) {
         self.key = key

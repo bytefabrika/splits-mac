@@ -32,6 +32,9 @@ final class Activity {
     var hrZones: [Double]
     /// The on-device model's take on this activity, kept once written.
     var coachNote: String?
+    /// Where it started; nil for indoor activities and ones without GPS.
+    var startLatitude: Double?
+    var startLongitude: Double?
 
     init(garminId: Int64) {
         self.garminId = garminId
@@ -72,6 +75,8 @@ final class Activity {
         laps = dto.lapCount
         isPR = dto.isPR ?? false
         isFavorite = dto.isFavorite ?? false
+        startLatitude = dto.startLatitude
+        startLongitude = dto.startLongitude
         minTemperature = dto.minTemperature
         maxTemperature = dto.maxTemperature
         let zones = [dto.hrTimeInZone_1, dto.hrTimeInZone_2, dto.hrTimeInZone_3, dto.hrTimeInZone_4, dto.hrTimeInZone_5]
@@ -175,6 +180,11 @@ enum Sport: String, CaseIterable, Identifiable {
         case .snow: Color(red: 0.7, green: 0.85, blue: 1.0)
         case .other: .gray
         }
+    }
+
+    /// Has a route worth drawing: outdoors, with a GPS start.
+    static func hasRoute(_ a: Activity) -> Bool {
+        a.startLatitude != nil && a.distance > 0 && !isIndoor(a.typeKey)
     }
 
     /// Indoor activities have no real route or climbing.

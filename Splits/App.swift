@@ -19,6 +19,8 @@ struct SplitsApp: App {
         if CommandLine.arguments.contains("--coach-test") { DebugSync.coach(container: container) }
         // `Splits --map-test < activity.zip > map.png`: the still map with the route drawn on, to check they line up.
         if CommandLine.arguments.contains("--map-test") { DebugSync.map() }
+        // `SPLITS_KEY=… Splits --routes-test` builds routes for the 10 newest outdoor activities in the store.
+        if CommandLine.arguments.contains("--routes-test") { DebugSync.routes(container: container) }
         #endif
     }
 
@@ -128,6 +130,25 @@ enum DebugSync {
             image.unlockFocus()
             let png = NSBitmapImageRep(data: image.tiffRepresentation!)!.representation(using: .png, properties: [:])!
             FileHandle.standardOutput.write(png)
+            exit(0)
+        }
+    }
+
+    static func routes(container: ModelContainer) {
+        Task { @MainActor in
+            let all = (try? container.mainContext.fetch(FetchDescriptor<Activity>(sortBy: [SortDescriptor(\.start, order: .reverse)]))) ?? []
+            let withCoordinates = all.filter { $0.startLatitude != nil }.count
+            let picked = Array(all.filter { $0.distance > 0 && !Sport.isIndoor($0.typeKey) && [.run, .ride].contains($0.sport) }.prefix(10))
+            print("activities \(all.count), with start coordinates \(withCoordinates), picked \(picked.count)")
+            let started = Date()
+            for a in picked {
+                do { try await RouteStore.shared.build(a.garminId) } catch { print("  \(a.garminId) failed: \(error)") }
+            }
+            let routes = await RouteStore.shared.load(picked.map(\.garminId))
+            for a in picked {
+                print("  \(a.typeKey) \(Int(a.distance)) m → \(routes[a.garminId]?.count ?? 0) points")
+            }
+            print("took \(String(format: "%.1f", Date().timeIntervalSince(started))) s")
             exit(0)
         }
     }

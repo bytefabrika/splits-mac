@@ -26,6 +26,8 @@ struct ActivityDTO: Decodable {
     let lapCount: Int?
     let isPR: Bool?
     let isFavorite: Bool?
+    let startLatitude: Double?
+    let startLongitude: Double?
     let minTemperature: Double?
     let maxTemperature: Double?
     let averageRunningCadenceInStepsPerMinute: Double?

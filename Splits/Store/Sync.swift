@@ -80,7 +80,9 @@ final class Sync {
         // With history already here, only look from a little before the newest one we have.
         var newest = FetchDescriptor<Activity>(sortBy: [SortDescriptor(\.start, order: .reverse)])
         newest.fetchLimit = 1
-        let from = (try context.fetch(newest).first?.start).map { GarminDate.string($0.addingTimeInterval(-2 * 86_400)) }
+        // Activities stored before start coordinates were kept need the whole list once more.
+        let backfilled = defaults.bool(forKey: "coordinatesBackfilled")
+        let from = backfilled ? (try context.fetch(newest).first?.start).map { GarminDate.string($0.addingTimeInterval(-2 * 86_400)) } : nil
 
         var start = 0, total = 0
         while true {
@@ -102,6 +104,7 @@ final class Sync {
             if page.count < Self.pageSize || start > 20_000 { break }
         }
         try context.save()
+        defaults.set(true, forKey: "coordinatesBackfilled")
     }
 
     func upsert(_ dtos: [ActivityDTO]) {
