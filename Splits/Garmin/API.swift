@@ -83,7 +83,12 @@ struct HeartRateZonesDTO: Codable {
 struct DailySummariesDTO: Decodable {
     struct Day: Decodable {
         struct HeartRate: Decodable { let restingValue: Int?; let minValue: Int?; let maxValue: Int? }
-        struct Stress: Decodable { let avgLevel: Int?; let maxLevel: Int?; let qualifier: String? }
+        struct Stress: Decodable {
+            let avgLevel: Int?; let maxLevel: Int?; let qualifier: String?
+            let restDurationInMillis: Double?; let lowStressDurationInMillis: Double?
+            let mediumStressDurationInMillis: Double?; let highStressDurationInMillis: Double?
+            let activityDurationInMillis: Double?
+        }
         struct BodyBattery: Decodable {
             let minValue: Int?; let maxValue: Int?; let chargedValue: Int?; let drainedValue: Int?; let latestValue: Int?
         }
@@ -151,6 +156,21 @@ struct BodyBatteryDayDTO: Decodable {
     }
 }
 
+/// `heartRateValues`: `[[timestamp ms (GMT), bpm], …]`.
+struct DailyHeartRateDTO: Decodable {
+    let restingHeartRate: Int?
+    let minHeartRate: Int?
+    let maxHeartRate: Int?
+    let heartRateValues: [[Double?]]?
+
+    var values: [(Date, Double)] {
+        (heartRateValues ?? []).compactMap { pair in
+            guard pair.count >= 2, let ms = pair[0], let bpm = pair[1] else { return nil }
+            return (Date(timeIntervalSince1970: ms / 1000), bpm)
+        }
+    }
+}
+
 struct StepsDTO: Decodable {
     let calendarDate: String?
     let totalSteps: Int?
@@ -183,8 +203,14 @@ enum Endpoint {
     static func steps(from: String, to: String) -> (String, [String: String]) {
         ("/usersummary-service/stats/steps/daily/\(from)/\(to)", [:])
     }
-    static func bodyBattery(from: String, to: String) -> (String, [String: String]) {
-        ("/wellness-service/wellness/bodyBattery/reports/daily", ["startDate": from, "endDate": to])
+    /// `chunks` sets the resolution: 96 is a point every 6 minutes, 200 every 3. Without it there are only a few
+    /// points a day.
+    static func bodyBattery(from: String, to: String, chunks: Int = 96) -> (String, [String: String]) {
+        ("/wellness-service/wellness/bodyBattery/reports/daily", ["startDate": from, "endDate": to, "chunks": String(chunks)])
+    }
+    /// Heart rate through one day, every 2 minutes.
+    static func dailyHeartRate(_ date: String) -> (String, [String: String]) {
+        ("/wellness-service/wellness/dailyHeartRate", ["date": date])
     }
     static let profile = ("/userprofile-service/userprofile/settings", [String: String]())
 }

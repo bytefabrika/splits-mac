@@ -5,6 +5,8 @@ import SwiftUI
 @main
 struct SplitsApp: App {
     let container: ModelContainer
+    /// Today's live numbers for the menu bar.
+    @State private var live = LiveToday()
 
     init() {
         container = try! ModelContainer(for: Activity.self, Day.self)
@@ -21,11 +23,19 @@ struct SplitsApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: "main") {
             ContentView()
         }
         .modelContainer(container)
         .defaultSize(width: 1100, height: 720)
+
+        MenuBarExtra {
+            MenuBarPanel(live: live)
+                .modelContainer(container)
+        } label: {
+            MenuBarLabel(live: live)
+        }
+        .menuBarExtraStyle(.window)
 
         Settings {
             SettingsView()
