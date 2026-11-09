@@ -61,6 +61,9 @@ struct TrendsView: View {
                     }
                 }
                 .padding(24)
+                // Take hits everywhere, so the scroll wheel works over empty space too.
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
             .navigationTitle("Trends")
             .navigationDestination(for: Int64.self) { id in

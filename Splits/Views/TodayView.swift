@@ -67,6 +67,9 @@ struct TodayView: View {
             }
             .padding(24)
             .frame(maxWidth: 1100, alignment: .leading)
+            // Fill the scroll view and take hits everywhere, so the scroll wheel works over empty space too.
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
         }
         .navigationTitle("Today")
     }

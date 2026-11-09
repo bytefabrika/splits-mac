@@ -73,6 +73,10 @@ struct ActivityPage: View {
             }
             .padding(24)
             .frame(maxWidth: 1180)
+            // Fill the scroll view and take hits everywhere: on macOS, empty space (padding, gaps, margins)
+            // otherwise doesn't receive the scroll wheel.
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
         }
         .navigationTitle(title)
         .task(id: activity.garminId) { await load() }
