@@ -8,6 +8,7 @@ struct ActivitiesView: View {
     @State private var search = ""
     @State private var sport: Sport?
     @State private var selection: Activity.ID?
+    @State private var path: [Int64] = []
     @State private var sortOrder = [KeyPathComparator(\Activity.start, order: .reverse)]
 
     private var shown: [Activity] {
@@ -18,8 +19,17 @@ struct ActivitiesView: View {
     }
 
     var body: some View {
+        NavigationStack(path: $path) {
+            table
+                .navigationDestination(for: Int64.self) { id in
+                    if let activity = activities.first(where: { $0.garminId == id }) { ActivityPage(activity: activity) }
+                }
+        }
+    }
+
+    private var table: some View {
         let shown = shown
-        Table(shown, selection: $selection, sortOrder: $sortOrder) {
+        return Table(shown, selection: $selection, sortOrder: $sortOrder) {
             TableColumn("Date", value: \.start) { a in
                 Text(a.start, format: .dateTime.year().month(.abbreviated).day().hour().minute())
             }
@@ -54,11 +64,9 @@ struct ActivitiesView: View {
                 .fixedSize()
             }
         }
-        .inspector(isPresented: .constant(selection != nil)) {
-            if let selected = shown.first(where: { $0.id == selection }) ?? activities.first(where: { $0.id == selection }) {
-                ActivityDetail(activity: selected)
-                    .inspectorColumnWidth(min: 280, ideal: 320)
-            }
+        // Double-click or Return opens the activity.
+        .contextMenu(forSelectionType: Activity.ID.self) { _ in } primaryAction: { ids in
+            if let id = ids.first, let activity = shown.first(where: { $0.id == id }) { path.append(activity.garminId) }
         }
         .navigationTitle("Activities")
         .navigationSubtitle(summary(shown))
@@ -101,66 +109,5 @@ struct ActivityRow: View {
             Text(Format.duration(activity.movingDuration)).monospacedDigit().foregroundStyle(.secondary).frame(width: 70, alignment: .trailing)
         }
         .padding(.vertical, 8)
-    }
-}
-
-struct ActivityDetail: View {
-    let activity: Activity
-    @Environment(\.format) private var format
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Label(activity.name.isEmpty ? Format.title(activity.typeKey) : activity.name, systemImage: activity.sport.symbol)
-                    .font(.title3.bold())
-                Text(activity.start, format: .dateTime.weekday(.wide).day().month(.wide).year().hour().minute())
-                    .foregroundStyle(.secondary)
-
-                Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 10) {
-                    row("Distance", activity.distance > 0 ? format.distance(activity.distance) : nil)
-                    row("Moving time", Format.duration(activity.movingDuration))
-                    row("Elapsed", Format.duration(activity.duration))
-                    row("Pace", activity.sport == .run || activity.sport == .walk
-                        ? activity.paceSecondsPerKm.map { format.pace(secondsPerKm: $0) } : nil)
-                    row("Avg speed", activity.averageSpeed.map { format.speed(metresPerSecond: $0) })
-                    row("Elevation gain", activity.elevationGain > 0 ? format.elevation(activity.elevationGain) : nil)
-                    row("Avg / max HR", activity.averageHR.map { "\(Int($0)) / \(Int(activity.maxHR ?? 0)) bpm" })
-                    row("Avg power", activity.averagePower.map { "\(Int($0)) W" })
-                    row("Cadence", activity.cadence.map { "\(Int($0)) spm" })
-                    row("Calories", activity.calories.map { "\(Int($0)) kcal" })
-                    row("Training effect", activity.aerobicEffect.map {
-                        String(format: "%.1f aerobic · %.1f anaerobic", $0, activity.anaerobicEffect ?? 0)
-                    })
-                    row("Training load", activity.trainingLoad.map { "\(Int($0))" })
-                    row("Steps", activity.steps.map { $0.formatted() })
-                    row("Laps", activity.laps.map { "\($0)" })
-                    row("Temperature", activity.minTemperature.map { "\(Int($0))–\(Int(activity.maxTemperature ?? $0)) °C" })
-                }
-
-                if activity.hrZones.count == 5, activity.hrZones.contains(where: { $0 > 0 }) {
-                    Text("Time in heart rate zones").font(.headline)
-                    Chart(Array(activity.hrZones.enumerated()), id: \.offset) { zone, seconds in
-                        BarMark(x: .value("Minutes", seconds / 60), y: .value("Zone", "Zone \(zone + 1)"))
-                            .foregroundStyle([Color.gray, .blue, .green, .orange, .red][zone])
-                            .annotation(position: .trailing) {
-                                Text(Format.duration(seconds)).font(.caption2).foregroundStyle(.secondary)
-                            }
-                    }
-                    .chartXAxis(.hidden)
-                    .frame(height: 140)
-                }
-            }
-            .padding()
-        }
-    }
-
-    @ViewBuilder
-    private func row(_ label: String, _ value: String?) -> some View {
-        if let value {
-            GridRow {
-                Text(label).foregroundStyle(.secondary)
-                Text(value).monospacedDigit()
-            }
-        }
     }
 }

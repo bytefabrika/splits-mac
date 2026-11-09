@@ -18,6 +18,8 @@ struct ContentView: View {
     @State private var sync: Sync?
     @State private var section: SidebarItem? = .today
     @State private var hasKey = Keychain.readKey() != nil
+    /// Set once the first sync screen has been seen.
+    @AppStorage("welcomed") private var welcomed = false
 
     var body: some View {
         Group {
@@ -25,8 +27,15 @@ struct ContentView: View {
                 OnboardingView { key in
                     Keychain.saveKey(key)
                     hasKey = true
+                    welcomed = false
                     Task { await sync?.run() }
                 }
+            } else if let sync, !welcomed {
+                FirstSyncView(sync: sync, onDone: { welcomed = true }, onChangeKey: {
+                    Keychain.deleteKey()
+                    hasKey = false
+                })
+                .environment(\.format, Format(units: sync.units))
             } else if let sync {
                 NavigationSplitView {
                     List(SidebarItem.allCases, selection: $section) { item in
@@ -55,9 +64,11 @@ struct ContentView: View {
                 }
             }
         }
-        .frame(minWidth: 860, minHeight: 560)
+        .frame(minWidth: 900, minHeight: 600)
         .onAppear {
             if sync == nil { sync = Sync(context: context) }
+            // Data from before the welcome screen existed: nothing to count up, go straight in.
+            if sync?.lastSync != nil && !(sync?.isRunning ?? false) { welcomed = true }
             // Sync on launch, at most once an hour.
             if hasKey, let sync, (sync.lastSync.map { Date().timeIntervalSince($0) > 3600 } ?? true) {
                 Task { await sync.run() }

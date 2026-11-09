@@ -6,6 +6,8 @@ struct TodayView: View {
     @Query(sort: \Day.date, order: .reverse) private var allDays: [Day]
     @Query(sort: \Activity.start, order: .reverse) private var activities: [Activity]
     @Environment(\.format) private var format
+    /// Today's Body Battery through the day. Fetched when the screen opens, not stored.
+    @State private var batteryCurve: [(Date, Double)] = []
 
     private var days: [Day] { Array(allDays.prefix(14)) }
     private var today: Day? { allDays.first }
@@ -13,6 +15,22 @@ struct TodayView: View {
     private var lastNight: Day? { allDays.prefix(2).first { $0.sleepSeconds != nil } }
 
     var body: some View {
+        NavigationStack {
+            content
+                .navigationDestination(for: Int64.self) { id in
+                    if let activity = activities.first(where: { $0.garminId == id }) { ActivityPage(activity: activity) }
+                }
+        }
+        .task(id: allDays.first?.date) {
+            let today = GarminDate.string(Date())
+            let (path, query) = Endpoint.bodyBattery(from: today, to: today)
+            if let days: [BodyBatteryDayDTO] = try? await GarminClient.shared.get(path, query: query) {
+                batteryCurve = days.last?.levels ?? []
+            }
+        }
+    }
+
+    private var content: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 if allDays.isEmpty {
@@ -38,7 +56,10 @@ struct TodayView: View {
                     Text("Recent activities").font(.headline).padding(.top, 6)
                     VStack(spacing: 0) {
                         ForEach(activities.prefix(6)) { activity in
-                            ActivityRow(activity: activity)
+                            NavigationLink(value: activity.garminId) {
+                                ActivityRow(activity: activity).contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
                             Divider()
                         }
                     }
@@ -95,7 +116,22 @@ struct TodayView: View {
                     Text("\(latest)").font(.title.bold())
                     Text("now").foregroundStyle(.secondary)
                 }
-                ProgressView(value: Double(latest), total: 100).tint(.blue)
+                if batteryCurve.count > 1 {
+                    Chart(batteryCurve, id: \.0) { point in
+                        AreaMark(x: .value("Time", point.0), y: .value("Level", point.1))
+                            .interpolationMethod(.monotone)
+                            .foregroundStyle(LinearGradient(colors: [.blue.opacity(0.5), .blue.opacity(0.05)], startPoint: .top, endPoint: .bottom))
+                        LineMark(x: .value("Time", point.0), y: .value("Level", point.1))
+                            .interpolationMethod(.monotone)
+                            .foregroundStyle(.blue)
+                    }
+                    .chartYScale(domain: 0...100)
+                    .chartYAxis(.hidden)
+                    .chartXAxis { AxisMarks(values: .stride(by: .hour, count: 6)) { _ in AxisValueLabel(format: .dateTime.hour()) } }
+                    .frame(height: 60)
+                } else {
+                    ProgressView(value: Double(latest), total: 100).tint(.blue)
+                }
                 Text("High \(today.bodyBatteryHigh ?? 0) · low \(today.bodyBatteryLow ?? 0) · +\(today.bodyBatteryCharged ?? 0) charged · −\(today.bodyBatteryDrained ?? 0) drained")
                     .font(.caption).foregroundStyle(.secondary)
             } else {
@@ -179,5 +215,25 @@ struct Sparkline: View {
         .chartYAxis(.hidden)
         .chartYScale(domain: .automatic(includesZero: false))
         .frame(height: 36)
+    }
+}
+
+struct ChartCard<Content: View>: View {
+    let title: String
+    let subtitle: String
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(title).font(.headline)
+                Spacer()
+                Text(subtitle).font(.caption).foregroundStyle(.secondary)
+            }
+            content.frame(height: 200)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 14))
     }
 }

@@ -32,6 +32,9 @@ actor GarminClient {
     private var token: (value: String, expires: Date)?
     private var lastRequest = Date.distantPast
 
+    /// The app's client. One instance, so its gap between requests applies to everything.
+    static let shared = GarminClient()
+
     init(key: @escaping () -> String? = Keychain.readKey, session: URLSession = .shared) {
         self.key = key
         self.session = session
@@ -105,6 +108,12 @@ actor GarminClient {
         case .dataCorrupted(let context): return "corrupted at \(path(context)): \(context.debugDescription)"
         @unknown default: return error.localizedDescription
         }
+    }
+
+    /// The original file the watch recorded, as Garmin stores it (a ZIP with one FIT file).
+    /// Note: Garmin answers 406 to "Accept: application/octet-stream" alone; "*/*" works.
+    func activityFile(_ id: Int64) async throws -> Data {
+        try await getData("/download-service/files/activity/\(id)", accept: "*/*")
     }
 
     private func send(_ request: URLRequest) async throws -> (Data, URLResponse) {

@@ -13,7 +13,18 @@ final class Sync {
         case failed(String)
     }
 
+    /// Running totals while syncing, for the first-sync screen.
+    struct Found: Equatable {
+        var activities = 0
+        var metres = 0.0
+        var seconds = 0.0
+        var nights = 0
+        var oldest: Date?
+        var sports: [Sport: Int] = [:]
+    }
+
     private(set) var state: State = .idle
+    private(set) var found = Found()
     private(set) var lastSync: Date?
     /// "metric" or "statute_us", from the Garmin profile.
     private(set) var units: String
@@ -29,7 +40,7 @@ final class Sync {
     private let defaults: UserDefaults
     private let today: () -> Date
 
-    init(client: GarminClient = GarminClient(), context: ModelContext, defaults: UserDefaults = .standard,
+    init(client: GarminClient = .shared, context: ModelContext, defaults: UserDefaults = .standard,
          today: @escaping () -> Date = Date.init) {
         self.client = client
         self.context = context
@@ -43,6 +54,7 @@ final class Sync {
 
     func run() async {
         guard !isRunning else { return }
+        found = Found()
         do {
             state = .running("Checking your key…")
             _ = try await client.authenticate(force: true)
@@ -76,6 +88,15 @@ final class Sync {
             let (path, query) = Endpoint.activities(start: start, limit: Self.pageSize, from: from)
             let page: [ActivityDTO] = try await client.get(path, query: query)
             upsert(page)
+            for dto in page {
+                found.activities += 1
+                found.metres += dto.distance ?? 0
+                found.seconds += dto.movingDuration ?? dto.duration ?? 0
+                found.sports[Sport(typeKey: dto.activityType?.typeKey ?? "other"), default: 0] += 1
+                if let start = dto.startTimeLocal.flatMap(GarminDate.local), start < (found.oldest ?? .distantFuture) {
+                    found.oldest = start
+                }
+            }
             total += page.count
             start += Self.pageSize
             if page.count < Self.pageSize || start > 20_000 { break }
@@ -149,6 +170,7 @@ final class Sync {
         let sleep: [SleepDTO] = try await client.get(Endpoint.sleep(from: from, to: to).0, query: Endpoint.sleep(from: from, to: to).1)
         for s in sleep where (s.sleepTimeSeconds ?? 0) > 0 {
             guard let date = s.calendarDate else { continue }
+            found.nights += 1
             let day = self.day(date)
             day.sleepSeconds = s.sleepTimeSeconds
             day.deepSeconds = s.deepSleepSeconds

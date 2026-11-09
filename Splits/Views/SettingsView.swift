@@ -39,6 +39,8 @@ struct SettingsView: View {
                 try? context.delete(model: Day.self)
                 try? context.save()
                 UserDefaults.standard.removeObject(forKey: "lastSync")
+                UserDefaults.standard.removeObject(forKey: "welcomed")
+                Task { await Tracks.shared.removeAll() }
                 NotificationCenter.default.post(name: .splitsKeyRemoved, object: nil)
             }
         }

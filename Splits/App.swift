@@ -10,6 +10,8 @@ struct SplitsApp: App {
         #if DEBUG
         // `SPLITS_KEY=… Splits --sync-test` runs a full sync into a throwaway store and prints what came back.
         if CommandLine.arguments.contains("--sync-test") { DebugSync.run() }
+        // `Splits --fit-test < activity.zip` decodes a Garmin download (ZIP or FIT) from stdin.
+        if CommandLine.arguments.contains("--fit-test") { DebugSync.fit() }
         #endif
     }
 
@@ -29,6 +31,27 @@ struct SplitsApp: App {
 
 #if DEBUG
 enum DebugSync {
+    static func fit() {
+        let input = FileHandle.standardInput.readDataToEndOfFile()
+        let started = Date()
+        do {
+            let fitData = input.prefix(4) == Data([0x50, 0x4B, 0x03, 0x04])
+                ? try Zip.entries(input).first { $0.name.lowercased().hasSuffix(".fit") }?.data ?? Data()
+                : input
+            let track = try FIT.decode(fitData)
+            let p = track.points
+            print("decoded \(fitData.count) bytes in \(Int(Date().timeIntervalSince(started) * 1000)) ms")
+            print("points \(p.count), with GPS \(p.filter { $0.coordinate != nil }.count), HR \(p.filter { $0.heartRate != nil }.count), altitude \(p.filter { $0.altitude != nil }.count), power \(p.filter { $0.power != nil }.count), cadence \(p.filter { $0.cadence != nil }.count)")
+            print("time \(p.first?.time.description ?? "-") → \(p.last?.time.description ?? "-")")
+            print("distance \(p.compactMap(\.distance).max() ?? 0) m, max HR \(p.compactMap(\.heartRate).max() ?? 0), altitude \(p.compactMap(\.altitude).min() ?? 0)…\(p.compactMap(\.altitude).max() ?? 0) m")
+            if let c = p.first(where: { $0.coordinate != nil })?.coordinate { print(String(format: "first GPS fix %.3f, %.3f", c.latitude, c.longitude)) }
+            print("laps \(track.laps.count): " + track.laps.prefix(3).map { "\(Int($0.distance ?? 0)) m in \(Int($0.moving ?? 0)) s, HR \(Int($0.averageHR ?? 0))" }.joined(separator: " | "))
+        } catch {
+            print("failed: \(error)")
+        }
+        exit(0)
+    }
+
     static func run() {
         let key = ProcessInfo.processInfo.environment["SPLITS_KEY"]
         Task { @MainActor in

@@ -94,6 +94,19 @@ struct HRVRangeDTO: Decodable {
     let hrvSummaries: [Summary]
 }
 
+/// One day's Body Battery through the day: `[[timestamp ms (GMT), level], …]`.
+struct BodyBatteryDayDTO: Decodable {
+    let date: String?
+    let bodyBatteryValuesArray: [[Double?]]?
+
+    var levels: [(Date, Double)] {
+        (bodyBatteryValuesArray ?? []).compactMap { pair in
+            guard pair.count >= 2, let ms = pair[0], let level = pair[1] else { return nil }
+            return (Date(timeIntervalSince1970: ms / 1000), level)
+        }
+    }
+}
+
 struct StepsDTO: Decodable {
     let calendarDate: String?
     let totalSteps: Int?
@@ -125,6 +138,9 @@ enum Endpoint {
     }
     static func steps(from: String, to: String) -> (String, [String: String]) {
         ("/usersummary-service/stats/steps/daily/\(from)/\(to)", [:])
+    }
+    static func bodyBattery(from: String, to: String) -> (String, [String: String]) {
+        ("/wellness-service/wellness/bodyBattery/reports/daily", ["startDate": from, "endDate": to])
     }
     static let profile = ("/userprofile-service/userprofile/settings", [String: String]())
 }

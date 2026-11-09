@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import SwiftUI
 
 /// An activity, as Garmin summarises it. SI units: metres, seconds, m/s.
 @Model
@@ -154,6 +155,23 @@ enum Sport: String, CaseIterable, Identifiable {
         case .hike: "figure.hiking"; case .strength: "dumbbell"; case .mindful: "figure.yoga"; case .racket: "figure.tennis"
         case .team: "figure.soccer"; case .water: "figure.rower"; case .snow: "figure.skiing.downhill"
         case .other: "figure.mixed.cardio"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .run: Color(red: 1.0, green: 0.42, blue: 0.29)
+        case .ride: Color(red: 1.0, green: 0.75, blue: 0.2)
+        case .swim: Color(red: 0.24, green: 0.72, blue: 1.0)
+        case .walk: Color(red: 0.45, green: 0.85, blue: 0.55)
+        case .hike: Color(red: 0.35, green: 0.65, blue: 0.35)
+        case .strength: Color(red: 0.72, green: 0.52, blue: 1.0)
+        case .mindful: Color(red: 1.0, green: 0.55, blue: 0.78)
+        case .racket: Color(red: 0.75, green: 0.95, blue: 0.24)
+        case .team: Color(red: 0.2, green: 0.8, blue: 0.75)
+        case .water: Color(red: 0.2, green: 0.5, blue: 0.95)
+        case .snow: Color(red: 0.7, green: 0.85, blue: 1.0)
+        case .other: .gray
         }
     }
 

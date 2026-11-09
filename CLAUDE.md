@@ -17,7 +17,9 @@ A native macOS app that shows your own Garmin Connect data (activities, sleep, H
 ## Code
 - `Garmin/`: `GarminClient` (actor), `API.swift` (DTOs + endpoints), `Keychain`.
 - `Store/`: SwiftData models `Activity` (unique `garminId`) and `Day` (unique `yyyy-MM-dd`), `Sync` (first run: all activities in pages of 100, wellness for 365 days in 28-day chunks newest first; later: from the newest stored item, re-reading the last 3 days).
-- `Views/`: Today, Activities (Table + inspector), Trends (Swift Charts), Onboarding, Settings. Units follow the Garmin profile (`metric` / `statute_us`).
+- Activity files: `GET /download-service/files/activity/{id}` with **`Accept: */*`** (Garmin answers 406 to `application/octet-stream` alone) returns a ZIP with one FIT file. `Zip.swift` (central directory + Compression raw deflate) and `FIT.swift` (own decoder: record 20 and lap 19 messages, compressed timestamps, dev fields skipped) read it; a 1.1 MB file decodes in ~0.2 s. `Tracks` caches FIT files in Application Support/Activities and `TrackAnalysis` makes chart samples, splits and fastest stretches.
+- `Views/`: Welcome (animated background, onboarding, first-sync counters), Today (cards + today's Body Battery curve fetched live), Activities (Table; double-click opens `ActivityPage`: header, map with route, HR/pace/elevation charts with a scrubber that moves a marker on the map, splits, fastest stretches, HR zones, training effect), Trends (highlights, 12-month calendar, year vs last year, weekly distance/zones/load, sport mix, sleep stages, HRV, resting HR, records), Settings. Units follow the Garmin profile (`metric` / `statute_us`).
+- `Splits --fit-test < file.zip` (Debug) decodes a download from stdin and prints what's in it.
 - Debug: `SPLITS_KEY=$(cat ~/GARMIN_API_KEY) build/Build/Products/Debug/Splits.app/Contents/MacOS/Splits --sync-test` runs a full sync into an in-memory store and prints counts. Never commit keys or real data.
 
 ## Build
