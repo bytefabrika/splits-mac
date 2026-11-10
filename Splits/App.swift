@@ -182,7 +182,9 @@ enum DebugSync {
         print("\(all.count) activities, \(points.count) with a start point, \(t.located) placed in \(String(format: "%.2f", Date().timeIntervalSince(started))) s")
         for v in t.visits { print("  \(v.country.flag) \(v.country.name): \(v.count)×, first \(GarminDate.string(v.first))") }
         for y in t.years { print("  \(y.year): \(y.countries.map(\.name).joined(separator: ", "))") }
-        print("  \(t.legs.count) crossings")
+        print("  \(t.legs.count) crossings, \(t.cities.count) cities")
+        for v in t.cities.sorted(by: { $0.count > $1.count }).prefix(25) { print("    \(v.country.flag) \(v.city.name): \(v.count)×") }
+        for y in t.years { print("  \(y.year): \(y.cities) cities, \(y.newCities) new") }
         exit(0)
     }
 

@@ -15,4 +15,10 @@ xcodegen
 open Splits.xcodeproj
 ```
 
+## Data
+- Country borders: [Natural Earth](https://www.naturalearthdata.com), public domain.
+- Cities: [GeoNames](https://www.geonames.org), licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Bundled in `Splits/Resources/cities.json` (towns of 15,000 people or more; name, country, position, population, province, capital).
+
+Both are bundled, so finding where an activity was never leaves your Mac.
+
 Not affiliated with Garmin. Garmin and Garmin Connect are trademarks of Garmin Ltd.

@@ -26,7 +26,7 @@ struct ExplorerView: View {
     /// A year picked in the list: the map shows only that year's countries and trips.
     @State private var year: Int?
     @State private var camera: MapCameraPosition = .automatic
-    @State private var hovered: (Country, CGPoint)?
+    @State private var hovered: (String, CGPoint)?
     /// Where the map is looking now, so the mouse wheel can zoom from there.
     @State private var current: MapCamera?
     @State private var hovering = false
@@ -40,6 +40,14 @@ struct ExplorerView: View {
         if let year, let y = travels.years.first(where: { $0.year == year }) { return y.countries }
         return travels.visits.map(\.country)
     }
+
+    private var shownCities: [Travels.CityVisit] {
+        guard let year, let y = travels.years.first(where: { $0.year == year }) else { return travels.cities }
+        return travels.cities.filter { y.cityIDs.contains($0.city.id) }
+    }
+
+    /// City dots only once zoomed in to a region; at world scale they'd be a smudge under the flags.
+    private var showCityDots: Bool { (current?.distance ?? .infinity) < 5_000_000 }
 
     /// Each pair of countries once, however often you went back and forth.
     private var shownLegs: [(from: Country, to: Country, date: Date)] {
@@ -95,6 +103,12 @@ struct ExplorerView: View {
         return text
     }
 
+    private func describe(_ v: Travels.CityVisit) -> String {
+        var text = "\(v.country.flag) \(v.city.name) · \(v.count) \(noun(v.count))"
+        if v.distance > 0 { text += " · \(format.distance(v.distance, decimals: 0))" }
+        return text
+    }
+
     private func noun(_ n: Int) -> String {
         switch filter {
         case .run: n == 1 ? "run" : "runs"
@@ -116,6 +130,17 @@ struct ExplorerView: View {
                 MapPolyline(MKGeodesicPolyline(coordinates: [leg.from.label, leg.to.label], count: 2))
                     .stroke(.white.opacity(0.75), style: StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: [5, 4]))
             }
+            if showCityDots {
+                ForEach(shownCities) { v in
+                    Annotation(v.city.name, coordinate: v.city.coordinate, anchor: .center) {
+                        Circle()
+                            .fill(.white)
+                            .overlay(Circle().stroke(color, lineWidth: 2))
+                            .frame(width: 8, height: 8)
+                    }
+                    .annotationTitles(.hidden)
+                }
+            }
             ForEach(shownCountries) { c in
                 Annotation(c.name, coordinate: c.label, anchor: .center) {
                     Text(c.flag)
@@ -135,15 +160,20 @@ struct ExplorerView: View {
         .onMapCameraChange(frequency: .continuous) { current = $0.camera }
         .onHover { hovering = $0 }
         .onContinuousHover { phase in
-            if case .active(let p) = phase, let c = proxy.convert(p, from: .local),
-               let country = Atlas.shared.country(lat: c.latitude, lon: c.longitude) {
-                hovered = (country, p)
+            guard case .active(let p) = phase else { hovered = nil; return }
+            // Over a city dot: the city. Otherwise the country under the pointer.
+            if showCityDots, let v = shownCities.first(where: { v in
+                proxy.convert(v.city.coordinate, to: .local).map { hypot($0.x - p.x, $0.y - p.y) < 9 } ?? false
+            }) {
+                hovered = (describe(v), p)
+            } else if let c = proxy.convert(p, from: .local), let country = Atlas.shared.country(lat: c.latitude, lon: c.longitude) {
+                hovered = (describe(country), p)
             } else {
                 hovered = nil
             }
         }
         .overlay(alignment: .topLeading) {
-            if let (country, p) = hovered { Tooltip(text: describe(country)).offset(x: p.x + 14, y: p.y + 10) }
+            if let (text, p) = hovered { Tooltip(text: text).offset(x: p.x + 14, y: p.y + 10) }
         }
         .onAppear { startWheelZoom() }
         .onDisappear { if let wheel { NSEvent.removeMonitor(wheel) }; wheel = nil }
@@ -180,6 +210,7 @@ struct ExplorerView: View {
                 header
                 if !travels.years.isEmpty { perYearChart }
                 yearsList
+                if !travels.cities.isEmpty { topCities }
                 if !travels.visits.isEmpty { allCountries }
             }
             .padding(20)
@@ -197,7 +228,7 @@ struct ExplorerView: View {
                     .contentTransition(.numericText())
                 Text(travels.visits.count == 1 ? "country" : "countries").font(.title2.weight(.bold))
             }
-            Text("\(travels.continents.count) \(travels.continents.count == 1 ? "continent" : "continents") · \(travels.legs.count) border crossings")
+            Text("\(travels.cities.count) \(travels.cities.count == 1 ? "city" : "cities") · \(travels.continents.count) \(travels.continents.count == 1 ? "continent" : "continents") · \(travels.legs.count) border crossings")
                 .foregroundStyle(.secondary)
             if let first = travels.visits.first {
                 Text("Started in \(first.country.flag) \(first.country.name), \(first.first.formatted(.dateTime.month(.wide).year()))")
@@ -237,7 +268,7 @@ struct ExplorerView: View {
                         HStack {
                             Text(String(y.year)).font(.title3.weight(.heavy)).monospacedDigit()
                             Spacer()
-                            Text("\(y.countries.count) \(y.countries.count == 1 ? "country" : "countries")")
+                            Text("\(y.countries.count) \(y.countries.count == 1 ? "country" : "countries") · \(y.cities) \(y.cities == 1 ? "city" : "cities")")
                                 .font(.callout.weight(.semibold))
                             if !y.new.isEmpty {
                                 Text("+\(y.new.count) new")
@@ -262,6 +293,42 @@ struct ExplorerView: View {
         }
     }
 
+    @State private var allCitiesShown = false
+
+    private var topCities: some View {
+        let sorted = shownCities.sorted { ($0.count, $0.distance) > ($1.count, $1.distance) }
+        let list = allCitiesShown ? sorted : Array(sorted.prefix(10))
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(year.map { "Cities in \($0)" } ?? "Cities, most \(noun(2)) first").font(.headline)
+                Spacer()
+                Text("\(sorted.count)").font(.headline).foregroundStyle(.secondary)
+            }
+            ForEach(Array(list.enumerated()), id: \.element.id) { i, v in
+                HStack(spacing: 8) {
+                    Text("\(i + 1)").font(.caption.monospacedDigit()).foregroundStyle(.secondary).frame(width: 22, alignment: .trailing)
+                    Text(v.country.flag)
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(v.city.name).font(.callout.weight(.semibold))
+                        Text("First \(v.first.formatted(.dateTime.day().month(.abbreviated).year()))").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: 0) {
+                        Text("\(v.count)×").font(.callout.monospacedDigit())
+                        if v.distance > 0 {
+                            Text(format.distance(v.distance, decimals: 0)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            if sorted.count > 10 {
+                Button(allCitiesShown ? "Show top 10" : "Show all \(sorted.count)") { allCitiesShown.toggle() }.buttonStyle(.link)
+            }
+            Text("City data © GeoNames (CC BY 4.0): towns of 15,000 people or more, within 25 km of where a run started.")
+                .font(.caption2).foregroundStyle(.tertiary)
+        }
+    }
+
     private var allCountries: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Every country, most \(noun(2)) first").font(.headline)
@@ -277,9 +344,8 @@ struct ExplorerView: View {
                     Spacer()
                     VStack(alignment: .trailing, spacing: 0) {
                         Text("\(v.count)×").font(.callout.monospacedDigit())
-                        if v.distance > 0 {
-                            Text(format.distance(v.distance, decimals: 0)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                        }
+                        let cities = travels.cities.filter { $0.country == v.country }.count
+                        Text("\(cities) \(cities == 1 ? "city" : "cities")").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                     }
                 }
             }
