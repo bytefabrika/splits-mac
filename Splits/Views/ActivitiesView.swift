@@ -7,6 +7,7 @@ struct ActivityTableRow: Identifiable {
     let id: Int64
     let start: Date
     let date: String
+    let time: String
     let name: String
     let symbol: String
     let sport: Sport
@@ -24,13 +25,15 @@ struct ActivityTableRow: Identifiable {
     init(_ a: Activity, format: Format) {
         id = a.garminId
         start = a.start
-        date = a.start.formatted(.dateTime.year().month(.abbreviated).day().hour().minute())
+        date = a.start.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().year())
+        time = a.start.formatted(date: .omitted, time: .shortened)
         name = a.name.isEmpty ? Format.title(a.typeKey) : a.name
         sport = a.sport
         symbol = a.sport.symbol
         typeKey = a.typeKey
-        distance = a.distance
-        distanceText = a.distance > 0 ? format.distance(a.distance) : "–"
+        distance = a.hasDistance ? a.distance : 0
+        // Padel or the gym record a few hundred metres of arm movement: not a distance worth showing.
+        distanceText = a.hasDistance ? format.distance(a.distance) : "–"
         seconds = a.activeSeconds
         timeText = Format.duration(a.activeSeconds)
         switch a.sport {
@@ -40,7 +43,7 @@ struct ActivityTableRow: Identifiable {
             let per100 = Int(a.movingDuration / (a.distance / 100))
             pace = String(format: "%d:%02d /100m", per100 / 60, per100 % 60)
         default:
-            pace = a.averageSpeed.map { $0 > 0 ? format.speed(metresPerSecond: $0) : "–" } ?? "–"
+            pace = a.hasDistance ? a.averageSpeed.map { $0 > 0 ? format.speed(metresPerSecond: $0) : "–" } ?? "–" : "–"
         }
         let outdoorClimb = a.elevationGain > 0 && !Sport.isIndoor(a.typeKey)
         elevation = outdoorClimb ? a.elevationGain : 0
@@ -76,6 +79,10 @@ struct ActivitiesView: View {
             refilter()
         }
         .onChange(of: search) { refilter() }
+        #if DEBUG
+        // `-openNewest YES`: opens the newest activity, for screenshots.
+        .onAppear { if UserDefaults.standard.bool(forKey: "openNewest"), let first = activities.first { path = [first.garminId] } }
+        #endif
         .onChange(of: sport) { refilter() }
         .onChange(of: sortOrder) { refilter() }
     }
@@ -93,8 +100,14 @@ struct ActivitiesView: View {
 
     private var table: some View {
         Table(rows, selection: $selection, sortOrder: $sortOrder) {
-            TableColumn("Date", value: \.start) { r in Text(r.date) }
-                .width(min: 130, ideal: 150)
+            TableColumn("Date", value: \.start) { r in
+                HStack(spacing: 6) {
+                    Text(r.date)
+                    Text(r.time).foregroundStyle(.secondary)
+                }
+                .monospacedDigit()
+            }
+            .width(min: 150, ideal: 190)
             TableColumn("Activity", value: \.name) { r in Label(r.name, systemImage: r.symbol) }
                 .width(min: 180, ideal: 260)
             TableColumn("Distance", value: \.distance) { r in Text(r.distanceText).monospacedDigit() }

@@ -43,6 +43,8 @@ struct Format {
 
     static func title(_ key: String?) -> String {
         guard let key else { return "–" }
+        // Garmin's own spellings that read oddly.
+        if let name = ["paddelball": "Padel", "hiit": "HIIT", "e_bike_fitness": "E-bike", "e_bike_mountain": "E-mountain bike"][key] { return name }
         return key.replacingOccurrences(of: "_", with: " ").capitalized
     }
 }

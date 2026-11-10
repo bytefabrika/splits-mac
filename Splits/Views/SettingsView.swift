@@ -38,7 +38,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 480)
+        .frame(width: 480, height: 580)  // tall enough that "Remove Key and Data…" isn't cut off
         .confirmationDialog("Remove your key and everything Splits downloaded?", isPresented: $confirmRemove) {
             Button("Remove", role: .destructive) {
                 Keychain.deleteKey()

@@ -221,7 +221,6 @@ struct ExplorerView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Explorer").font(.system(size: 13, weight: .heavy)).tracking(1.5).foregroundStyle(color)
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("\(travels.visits.count)")
                     .font(.system(size: 56, weight: .heavy, design: .rounded))

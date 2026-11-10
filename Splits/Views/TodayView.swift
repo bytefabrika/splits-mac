@@ -42,18 +42,18 @@ struct TodayView: View {
 
                     ReportCard(.daily, days: allDays, activities: activities)
 
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), spacing: 14)], spacing: 14) {
-                        sleepCard
-                        hrvCard
-                        bodyBatteryCard
-                        metricCard("Resting heart rate", value: today?.restingHR.map { "\($0)" }, unit: "bpm",
-                                   symbol: "heart", tint: .red, series: days.map { ($0.day, $0.restingHR.map(Double.init)) })
-                        metricCard("Stress", value: today?.stressAvg.map { "\($0)" }, unit: "avg",
-                                   symbol: "waveform.path.ecg", tint: .orange, series: days.map { ($0.day, $0.stressAvg.map(Double.init)) })
-                        metricCard("Steps", value: today?.steps.map { $0.formatted() },
-                                   unit: today?.stepGoal.map { "of \($0.formatted())" } ?? "",
-                                   symbol: "shoeprints.fill", tint: .green, series: days.map { ($0.day, $0.steps.map(Double.init)) })
-                    }
+                    CardGrid(cards: [
+                        AnyView(sleepCard),
+                        AnyView(hrvCard),
+                        AnyView(bodyBatteryCard),
+                        AnyView(metricCard("Resting heart rate", value: today?.restingHR.map { "\($0)" }, unit: "bpm",
+                                           symbol: "heart", tint: .red, series: days.map { ($0.day, $0.restingHR.map(Double.init)) })),
+                        AnyView(metricCard("Stress", value: today?.stressAvg.map { "\($0)" }, unit: "avg",
+                                           symbol: "waveform.path.ecg", tint: .orange, series: days.map { ($0.day, $0.stressAvg.map(Double.init)) })),
+                        AnyView(metricCard("Steps", value: today?.steps.map { $0.formatted() },
+                                           unit: today?.stepGoal.map { "of \($0.formatted())" } ?? "",
+                                           symbol: "shoeprints.fill", tint: .green, series: days.map { ($0.day, $0.steps.map(Double.init)) })),
+                    ])
 
 
                     Text("Recent activities").font(.headline).padding(.top, 6)
@@ -166,12 +166,19 @@ struct Card<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label(title, systemImage: symbol).font(.subheadline.weight(.semibold)).foregroundStyle(tint)
+            Label {
+                Text(title)
+            } icon: {
+                Image(systemName: symbol).foregroundStyle(tint)
+            }
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.secondary)
             content
         }
         .padding(16)
-        .frame(maxWidth: .infinity, minHeight: 150, alignment: .topLeading)
-        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 14))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .frame(minHeight: 150)
+        .card()
     }
 }
 
@@ -308,7 +315,21 @@ struct ReportCard: View {
                 }
                 let shown = writing ? text : (savedDate == today ? savedText : "")
                 if !shown.isEmpty {
-                    Text(Coach.withoutDashes(shown)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                    let text = Coach.withoutDashes(shown)
+                    let lines = text.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: true)
+                    VStack(alignment: .leading, spacing: 8) {
+                        // The model writes a one-line headline first: it reads as one.
+                        if lines.count == 2 {
+                            Text(DailyBriefing.headline(String(lines[0])))
+                                .font(.title3.weight(.semibold))
+                            Text(lines[1].trimmingCharacters(in: .whitespacesAndNewlines))
+                        } else {
+                            Text(text)
+                        }
+                    }
+                    .textSelection(.enabled)
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
                 } else if !writing {
                     HStack(spacing: 12) {
                         Button { Task { await write() } } label: { Label(kind.ask, systemImage: "wand.and.stars") }

@@ -19,21 +19,36 @@ struct ContentView: View {
     @Environment(\.modelContext) private var context
     /// Owned by the app, so the menu bar and the morning briefing can sync with the window closed.
     let sync: Sync
-    @State private var section: SidebarItem? = .today
+    @State private var section: SidebarItem? = {
+        #if DEBUG
+        // `open Splits.app --args -page trends` opens straight on a page, for screenshots.
+        if let page = UserDefaults.standard.string(forKey: "page"), let item = SidebarItem.allCases.first(where: { $0.rawValue.lowercased() == page }) { return item }
+        #endif
+        return .today
+    }()
+    #if DEBUG
+    /// `-showWelcome YES` / `-showFirstSync YES`: those screens without removing the key.
+    private let showWelcome = UserDefaults.standard.bool(forKey: "showWelcome")
+    private let showFirstSync = UserDefaults.standard.bool(forKey: "showFirstSync")
+    #else
+    private let showWelcome = false
+    private let showFirstSync = false
+    #endif
+    @Environment(\.openSettings) private var openSettings
     @State private var hasKey = Keychain.readKey() != nil
     /// Set once the first sync screen has been seen.
     @AppStorage("welcomed") private var welcomed = false
 
     var body: some View {
         Group {
-            if !hasKey {
+            if !hasKey || showWelcome {
                 OnboardingView { key in
                     Keychain.saveKey(key)
                     hasKey = true
                     welcomed = false
                     Task { await sync.run() }
                 }
-            } else if !welcomed {
+            } else if !welcomed || showFirstSync {
                 FirstSyncView(sync: sync, onDone: { welcomed = true }, onChangeKey: {
                     Keychain.deleteKey()
                     hasKey = false
@@ -71,6 +86,9 @@ struct ContentView: View {
         }
         .frame(minWidth: 900, minHeight: 600)
         .onAppear {
+            #if DEBUG
+            if UserDefaults.standard.bool(forKey: "showSettings") { openSettings() }
+            #endif
             // Data from before the welcome screen existed: nothing to count up, go straight in.
             if sync.lastSync != nil && !sync.isRunning { welcomed = true }
             // Sync on launch, at most once an hour, or right away if start coordinates still need filling in.

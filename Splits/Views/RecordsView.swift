@@ -25,7 +25,7 @@ struct RecordsView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 28) {
                     if !finder.finished || finder.running { progress }
                     cards
                     if !efforts.isEmpty { predictions }
@@ -81,7 +81,7 @@ struct RecordsView: View {
             }
         }
         .padding(14)
-        .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+        .card()
     }
 
     // MARK: Cards
@@ -95,32 +95,28 @@ struct RecordsView: View {
         return format.pace(secondsPerKm: e.seconds / metres * 1000)
     }
 
+    /// Five records side by side, each one opening the run it came from.
     private var cards: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 190), spacing: 12)], spacing: 12) {
-            ForEach(Records.distances, id: \.label) { d in
-                let e = best(d.label)
-                NavigationLink(value: e?.activity ?? 0) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Label(d.label.uppercased(), systemImage: "trophy.fill")
-                            .font(.caption.weight(.heavy)).tracking(0.8).foregroundStyle(.orange)
-                        Text(e.map { Format.duration($0.seconds) } ?? "–")
-                            .font(.system(size: 30, weight: .heavy, design: .rounded)).monospacedDigit()
-                        if let e {
-                            Text(pace(e)).font(.callout.monospacedDigit()).foregroundStyle(.secondary)
-                            Text("\(e.name) · \(e.date.formatted(date: .abbreviated, time: .omitted))")
-                                .font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                        } else {
-                            Text(finder.finished ? "No run this long yet" : "Still looking…")
-                                .font(.caption).foregroundStyle(.secondary)
+        Panel(title: "Personal records", subtitle: "The fastest stretch inside any outdoor run") {
+            Grid(alignment: .topLeading, horizontalSpacing: 0) {
+                GridRow {
+                    ForEach(Array(Records.distances.enumerated()), id: \.element.label) { i, d in
+                        let e = best(d.label)
+                        HStack(spacing: 0) {
+                            if i > 0 { Divider().padding(.horizontal, 8) }
+                            NavigationLink(value: e?.activity ?? 0) {
+                                RecordColumn(title: d.label, symbol: "trophy", tint: .orange,
+                                             value: e.map { Format.duration($0.seconds) } ?? "–",
+                                             detail: e.map(pace),
+                                             note: e.map { "\($0.name) · \($0.date.formatted(date: .abbreviated, time: .omitted))" }
+                                                ?? (finder.finished ? "No run this long yet" : "Still looking…"),
+                                             opens: e != nil)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(e == nil)
                         }
                     }
-                    .padding(14)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
-                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .disabled(e == nil)
             }
         }
     }
@@ -129,40 +125,31 @@ struct RecordsView: View {
 
     private var predictions: some View {
         let predictor = RacePredictor(efforts: efforts.map { ($0.activity, $0.date, $0.label, $0.seconds) })
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline) {
-                Label("If you raced today", systemImage: "flag.checkered").font(.headline).foregroundStyle(Sport.run.color)
-                Spacer()
-                Text("From your best efforts of the last \(predictor.months) months").font(.caption).foregroundStyle(.secondary)
-            }
+        return Panel(title: "If you raced today", subtitle: "Predicted from your best efforts of the last \(predictor.months) months") {
             if predictor.predictions.isEmpty {
                 Text("Needs a run of 5 km or more in the last year.").foregroundStyle(.secondary)
             } else {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 190), spacing: 12)], spacing: 12) {
-                    ForEach(predictor.predictions) { p in
-                        NavigationLink(value: p.source.activity) {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(p.label.uppercased()).font(.caption.weight(.heavy)).tracking(0.8).foregroundStyle(.secondary)
-                                Text(Format.duration(p.seconds))
-                                    .font(.system(size: 28, weight: .heavy, design: .rounded)).monospacedDigit()
-                                Text(format.pace(secondsPerKm: p.seconds / p.metres * 1000)).font(.callout.monospacedDigit()).foregroundStyle(.secondary)
-                                Text("From your \(p.source.label) of \(Format.duration(p.source.seconds)), \(p.source.date.formatted(.dateTime.day().month(.abbreviated)))")
-                                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                Grid(alignment: .topLeading, horizontalSpacing: 0) {
+                    GridRow {
+                        ForEach(Array(predictor.predictions.enumerated()), id: \.element.id) { i, p in
+                            HStack(spacing: 0) {
+                                if i > 0 { Divider().padding(.horizontal, 8) }
+                                NavigationLink(value: p.source.activity) {
+                                    RecordColumn(title: p.label, symbol: "flag.checkered", tint: Sport.run.color,
+                                                 value: Format.duration(p.seconds),
+                                                 detail: format.pace(secondsPerKm: p.seconds / p.metres * 1000),
+                                                 note: "From your \(p.source.label) of \(Format.duration(p.source.seconds)), \(p.source.date.formatted(.dateTime.day().month(.abbreviated)))",
+                                                 opens: true)
+                                }
+                                .buttonStyle(.plain)
                             }
-                            .padding(14)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Sport.run.color.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
-                            .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
                     }
                 }
                 Text("Riegel's formula on the fastest stretches inside your runs. Training efforts are rarely all-out, so on a rested race day you'll often beat these. The marathon also needs the long runs to back it up.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
-        .padding(16)
-        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 14))
     }
 
     // MARK: Progression
@@ -177,22 +164,24 @@ struct RecordsView: View {
             return (e.date, e.seconds)
         } + (list.isEmpty ? [] : [(Date(), record)])
         let broken = steps.count - 1
+        // A few walks with a run in the middle sit far below the rest and squash the chart: the slowest 5% are left off.
+        let sorted = list.map(\.seconds).sorted()
+        let slowest = sorted.isEmpty ? 1 : sorted[min(sorted.count - 1, Int(Double(sorted.count) * 0.95))]
+        let fastest = sorted.first ?? 0
+        let shown = list.filter { $0.seconds <= slowest }
 
-        return VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("How your record came down").font(.headline)
-                Spacer()
-                Picker("Distance", selection: $distance) {
-                    ForEach(Records.distances, id: \.label) { Text($0.label).tag($0.label) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
+        return Panel(title: "How your record came down",
+                     subtitle: list.isEmpty ? "No \(distance) efforts yet" : "\(list.count) runs with a \(distance) in them · record broken \(max(broken - 1, 0)) times") {
+            Picker("Distance", selection: $distance) {
+                ForEach(Records.distances, id: \.label) { Text($0.label).tag($0.label) }
             }
-            Text(list.isEmpty ? "No \(distance) efforts yet." : "\(list.count) runs with a \(distance) in them · record broken \(max(broken - 1, 0)) times")
-                .font(.caption).foregroundStyle(.secondary)
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .controlSize(.small)
+            .fixedSize()
+        } content: {
             Chart {
-                ForEach(list) { e in
+                ForEach(shown) { e in
                     PointMark(x: .value("Date", e.date), y: .value("Time", -e.seconds))
                         .symbolSize(14)
                         .foregroundStyle(Sport.run.color.opacity(0.35))
@@ -209,7 +198,7 @@ struct RecordsView: View {
                     }
                 }
             }
-            .chartYScale(domain: .automatic(includesZero: false))
+            .chartYScale(domain: -(slowest * 1.02)...(-(fastest * 0.98)))
             .chartYAxis {
                 AxisMarks { value in
                     AxisGridLine()
@@ -219,8 +208,6 @@ struct RecordsView: View {
             .frame(height: 240)
             .drawingGroup()
         }
-        .padding(16)
-        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 14))
     }
 
     // MARK: By year
@@ -230,8 +217,7 @@ struct RecordsView: View {
         let years = Set(efforts.map { calendar.component(.year, from: $0.date) }).sorted(by: >)
         let allTime = Dictionary(uniqueKeysWithValues: Records.distances.compactMap { d in best(d.label).map { (d.label, $0.id) } })
 
-        return VStack(alignment: .leading, spacing: 10) {
-            Text("Best of each year").font(.headline)
+        return Panel(title: "Best of each year", subtitle: "The trophy marks the all-time record") {
             Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 8) {
                 GridRow {
                     Text("")
@@ -241,7 +227,7 @@ struct RecordsView: View {
                 ForEach(years, id: \.self) { year in
                     let inYear = efforts.filter { calendar.component(.year, from: $0.date) == year }
                     GridRow {
-                        Text(String(year)).font(.callout.weight(.heavy)).monospacedDigit()
+                        Text(String(year)).font(.callout.weight(.semibold)).monospacedDigit()
                         ForEach(Records.distances, id: \.label) { d in
                             if let e = best(d.label, in: inYear) {
                                 NavigationLink(value: e.activity) {
@@ -261,7 +247,39 @@ struct RecordsView: View {
                 }
             }
         }
-        .padding(16)
-        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 14))
+    }
+}
+
+/// One number in a row of them: what it is, the number, a detail and where it came from. Hover shows it opens.
+struct RecordColumn: View {
+    let title: String
+    let symbol: String
+    let tint: Color
+    let value: String
+    let detail: String?
+    let note: String
+    let opens: Bool
+    @State private var hovering = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Label {
+                Text(title)
+            } icon: {
+                Image(systemName: symbol).foregroundStyle(tint)
+            }
+            .font(.subheadline).foregroundStyle(.secondary)
+            Text(value)
+                .font(.system(.title, design: .rounded).weight(.semibold)).monospacedDigit()
+                .lineLimit(1).minimumScaleFactor(0.6)
+            if let detail { Text(detail).font(.callout).monospacedDigit().foregroundStyle(.secondary) }
+            Text(note).font(.caption).foregroundStyle(.secondary).lineLimit(2).fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(6)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.primary.opacity(hovering ? 0.06 : 0)))
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 && opens }
+        .accessibilityElement(children: .combine)
     }
 }

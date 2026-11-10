@@ -51,6 +51,9 @@ final class Activity {
     }
 
     var sport: Sport { Sport(typeKey: typeKey) }
+    /// Distance worth showing: padel, gym or football record a few hundred metres of wrist movement, which
+    /// says nothing; for those, time is the number that matters.
+    var hasDistance: Bool { sport.isDistanceSport && distance > 0 }
     /// Time to count for totals: moving time where moving is the point (run, ride, swim…), the whole session
     /// otherwise. Garmin's "moving" time for padel or strength is the few minutes the watch saw you travel:
     /// a 90-minute match shows about 5.

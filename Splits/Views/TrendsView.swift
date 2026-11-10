@@ -39,16 +39,30 @@ struct TrendsView: View {
                     ActivityCalendar(activities: allActivities)
                     yearOverYear
 
-                    HStack(alignment: .top, spacing: 20) {
-                        weeklyDistance(activities)
-                        sportMix(activities).frame(width: 320)
+                    // Side by side when there's room, stacked when there isn't: the charts' legends don't wrap,
+                    // so a fixed pair pushed the page wider than the window.
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .top, spacing: 20) {
+                            weeklyDistance(activities)
+                            sportMix(activities).frame(width: 320)
+                        }
+                        VStack(alignment: .leading, spacing: 28) {
+                            weeklyDistance(activities)
+                            sportMix(activities)
+                        }
                     }
                     weeklyLoad(activities)
                     aerobicForm(since: since)
                     sleepStages(days)
-                    HStack(alignment: .top, spacing: 20) {
-                        hrv(days)
-                        restingHR(days)
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .top, spacing: 20) {
+                            hrv(days)
+                            restingHR(days)
+                        }
+                        VStack(alignment: .leading, spacing: 28) {
+                            hrv(days)
+                            restingHR(days)
+                        }
                     }
                     records(activities)
 
@@ -194,7 +208,19 @@ struct TrendsView: View {
         }
         let rows = minutes.values.sorted { $0.start < $1.start }
         let load = weekly(activities, value: { $0.trainingLoad ?? 0 }, group: { _ in "Load" })
-        return HStack(alignment: .top, spacing: 18) {
+        return ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 20) {
+                zoneChart(rows, zoneNames, zoneColors)
+                loadChart(load).frame(width: 360)
+            }
+            VStack(alignment: .leading, spacing: 28) {
+                zoneChart(rows, zoneNames, zoneColors)
+                loadChart(load)
+            }
+        }
+    }
+
+    private func zoneChart(_ rows: [ZoneWeek], _ zoneNames: [String], _ zoneColors: [Color]) -> some View {
             ChartCard(title: "Time in heart rate zones", subtitle: "minutes per week") {
                 Chart(rows) { row in
                     BarMark(x: .value("Week", row.start, unit: .weekOfYear), y: .value("Minutes", row.minutes))
@@ -202,14 +228,15 @@ struct TrendsView: View {
                 }
                 .chartForegroundStyleScale(domain: zoneNames, range: zoneColors)
             }
+    }
+
+    private func loadChart(_ load: [WeekSport]) -> some View {
             ChartCard(title: "Training load", subtitle: "Garmin's load, per week") {
                 Chart(load) { week in
                     BarMark(x: .value("Week", week.start, unit: .weekOfYear), y: .value("Load", week.value))
                         .foregroundStyle(.teal.gradient)
                 }
             }
-            .frame(width: 360)
-        }
     }
 
     // MARK: Sport mix
@@ -311,10 +338,12 @@ struct TrendsView: View {
 
         return Panel(title: "Aerobic form", subtitle: "Your running pace at \(form.reference) bpm, from \(form.points.count) outdoor runs") {
             if let now = form.now {
-                HStack(alignment: .firstTextBaseline, spacing: 14) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
                     Text(format.pace(secondsPerKm: now))
                         .font(.system(.largeTitle, design: .rounded).weight(.semibold)).monospacedDigit()
                     Text("at \(form.reference) bpm, last 30 days").foregroundStyle(.secondary)
+                    }
                     if let change, abs(change) >= 1 {
                         let faster = change < 0
                         let seconds = Int(abs(format.imperial ? change * 1.609344 : change).rounded())
@@ -426,7 +455,7 @@ struct RecordCell: View {
 struct ActivityCalendar: View {
     let activities: [Activity]
     @AppStorage("calendarRunsOnly") private var runsOnly = true
-    @State private var width: CGFloat = 800
+    @State private var width: CGFloat = 500
 
     private static let gap: CGFloat = 3
     private static let labelWidth: CGFloat = 30
@@ -443,7 +472,7 @@ struct ActivityCalendar: View {
         }
         let weeks = (0..<53).map { calendar.date(byAdding: .weekOfYear, value: $0, to: firstWeek)! }
         let streaks = Streaks(dates: shown.map(\.start))
-        let cell = max(6, min(22, (width - Self.labelWidth - 52 * Self.gap) / 53))
+        let cell = max(6, min(22, ((width - Self.labelWidth - 52 * Self.gap) / 53).rounded(.down)))
 
         return Panel(title: "Last 12 months", subtitle: "\(minutes.count) active days") {
             Picker("Show", selection: $runsOnly) {
@@ -468,6 +497,10 @@ struct ActivityCalendar: View {
                 Metric(label: "Busiest week", symbol: "star", tint: .yellow, value: "\(streaks.bestWeek) \(noun)"),
             ])
             Divider()
+            // Measures the width on offer with a flexible empty view; measuring the grid itself fed back into its
+            // own size and grew past the window.
+            Color.clear.frame(maxWidth: .infinity, maxHeight: 0)
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
             VStack(alignment: .leading, spacing: 4) {
                 // Month names over the week each month starts in.
                 ZStack(alignment: .topLeading) {
@@ -518,7 +551,9 @@ struct ActivityCalendar: View {
                 }
                 .padding(.top, 4)
             }
-            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+            // The grid mustn't hold the box open: it sizes itself from the width measured above, and if it also
+            // set that width the two would never shrink (the page ran wider than the window).
+            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -533,3 +568,4 @@ struct ActivityCalendar: View {
         }
     }
 }
+

@@ -31,7 +31,7 @@ struct ActivityPage: View {
                 if let analysis {
                     if !analysis.route.isEmpty && !Sport.isIndoor(activity.typeKey) {
                         // A still picture of the map: a live map in a scrolling page is slow and catches the scroll wheel.
-                        RouteSnapshot(analysis: analysis, sport: sport, selectedKm: selectedKm.map { format.imperial ? $0 * 1.609344 : $0 })
+                        RouteSnapshot(analysis: analysis, sport: sport, selectedKm: activity.hasDistance ? selectedKm.map { format.imperial ? $0 * 1.609344 : $0 } : nil)
                             .frame(height: 380)
                             .clipShape(RoundedRectangle(cornerRadius: 18))
                             .onTapGesture(count: 2) { exploringMap = true }
@@ -121,8 +121,10 @@ struct ActivityPage: View {
 
     private var header: some View {
         ZStack(alignment: .bottomLeading) {
-            LinearGradient(colors: [sport.color, sport.color.opacity(0.6), .black.opacity(0.35)],
-                           startPoint: .topLeading, endPoint: .bottomTrailing)
+            // The sport's colour, darkened towards the bottom where the text sits, so white text keeps at least
+            // 4.5:1 even on the light ones (padel's lime, cycling's yellow).
+            sport.color
+            LinearGradient(colors: [.black.opacity(0.15), .black.opacity(0.52)], startPoint: .top, endPoint: .bottom)
             Image(systemName: sport.symbol)
                 .font(.system(size: 170, weight: .bold))
                 .foregroundStyle(.white.opacity(0.16))
@@ -131,9 +133,9 @@ struct ActivityPage: View {
                 .offset(x: -24, y: 26)
             HStack(alignment: .bottom) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(Format.title(activity.typeKey).uppercased())
-                        .font(.caption.weight(.heavy)).tracking(1.5).opacity(0.85)
-                    Text(title).font(.system(size: 32, weight: .heavy, design: .rounded)).lineLimit(2)
+                    Label(Format.title(activity.typeKey), systemImage: sport.symbol)
+                        .font(.subheadline.weight(.semibold)).opacity(0.9)
+                    Text(title).font(.system(size: 32, weight: .bold, design: .rounded)).lineLimit(2)
                     HStack(spacing: 6) {
                         Text(activity.start, format: .dateTime.weekday(.wide).day().month(.wide).year().hour().minute())
                         if let location { Text("· \(location)") }
@@ -148,12 +150,19 @@ struct ActivityPage: View {
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 0) {
-                    if activity.distance > 0 {
+                    if activity.hasDistance {
                         Text(format.distance(activity.distance, decimals: 2))
-                            .font(.system(size: 40, weight: .heavy, design: .rounded)).monospacedDigit()
+                            .font(.system(size: 40, weight: .bold, design: .rounded)).monospacedDigit()
+                        Text(Format.duration(activity.activeSeconds))
+                            .font(.system(size: 22, weight: .semibold, design: .rounded)).monospacedDigit().opacity(0.9)
+                    } else {
+                        Text(Format.duration(activity.activeSeconds))
+                            .font(.system(size: 40, weight: .bold, design: .rounded)).monospacedDigit()
+                        if let hr = activity.averageHR {
+                            Text("\(Int(hr)) bpm average")
+                                .font(.system(size: 18, weight: .semibold, design: .rounded)).monospacedDigit().opacity(0.9)
+                        }
                     }
-                    Text(Format.duration(activity.activeSeconds))
-                        .font(.system(size: 22, weight: .bold, design: .rounded)).monospacedDigit().opacity(0.9)
                 }
             }
             .foregroundStyle(.white)
@@ -189,7 +198,12 @@ struct StatGroups: View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), spacing: 14)], alignment: .leading, spacing: 14) {
             ForEach(groups, id: \.title) { group in
                 VStack(alignment: .leading, spacing: 12) {
-                    Label(group.title, systemImage: group.symbol).font(.subheadline.weight(.semibold)).foregroundStyle(group.tint)
+                    Label {
+                        Text(group.title)
+                    } icon: {
+                        Image(systemName: group.symbol).foregroundStyle(group.tint)
+                    }
+                    .font(.headline)
                     Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 10) {
                         ForEach(Array(stride(from: 0, to: group.items.count, by: 2)), id: \.self) { i in
                             GridRow {
@@ -200,16 +214,16 @@ struct StatGroups: View {
                     }
                 }
                 .padding(16)
-                .frame(maxWidth: .infinity, minHeight: 150, alignment: .topLeading)
-                .background(group.tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 16))
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .card()
             }
         }
     }
 
     private func cell(_ item: (String, String)) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(item.0.uppercased()).font(.caption2.weight(.bold)).tracking(0.6).foregroundStyle(.secondary)
-            Text(item.1).font(.system(size: 19, weight: .bold, design: .rounded)).monospacedDigit()
+            Text(item.0).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+            Text(item.1).font(.system(.title3, design: .rounded).weight(.semibold)).monospacedDigit()
                 .lineLimit(1).minimumScaleFactor(0.6)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -220,12 +234,12 @@ struct StatGroups: View {
     private var groups: [StatGroup] {
         let a = activity, d = detail
         var overview: [(String, String)] = []
-        if a.distance > 0 { overview.append(("Distance", format.distance(a.distance))) }
+        if a.hasDistance { overview.append(("Distance", format.distance(a.distance))) }
         overview.append(a.sport.isDistanceSport ? ("Moving time", Format.duration(a.movingDuration)) : ("Time", Format.duration(a.duration)))
         if isPaceSport, let pace = a.paceSecondsPerKm {
             overview.append(("Avg pace", format.pace(secondsPerKm: pace)))
             if let gap = d?.avgGradeAdjustedSpeed, gap > 0 { overview.append(("Grade-adjusted", format.pace(secondsPerKm: 1000 / gap))) }
-        } else if let speed = a.averageSpeed, speed > 0 {
+        } else if a.hasDistance, let speed = a.averageSpeed, speed > 0 {
             overview.append(("Avg speed", format.speed(metresPerSecond: speed)))
         }
         if a.elevationGain > 0 && !Sport.isIndoor(a.typeKey) { overview.append(("Climb", format.elevation(a.elevationGain))) }
@@ -252,11 +266,12 @@ struct StatGroups: View {
         if let steps = a.steps, steps > 0 { body.append(("Steps", steps.formatted())) }
 
         var dynamics: [(String, String)] = []
-        if let cadence = a.cadence { dynamics.append(("Cadence", "\(Int(cadence)) spm")) }
-        if let stride = d?.strideLength, stride > 0 { dynamics.append(("Stride", String(format: "%.2f m", stride / 100))) }
-        if let gct = d?.groundContactTime, gct > 0 { dynamics.append(("Ground contact", "\(Int(gct)) ms")) }
-        if let vo = d?.verticalOscillation, vo > 0 { dynamics.append(("Vertical osc.", String(format: "%.1f cm", vo))) }
-        if let vr = d?.verticalRatio, vr > 0 { dynamics.append(("Vertical ratio", String(format: "%.1f%%", vr))) }
+        // Running dynamics only mean something on foot; a padel match's "cadence" is arm swings.
+        if [.run, .walk, .hike].contains(a.sport), let cadence = a.cadence { dynamics.append(("Cadence", "\(Int(cadence)) spm")) }
+        if isPaceSport, let stride = d?.strideLength, stride > 0 { dynamics.append(("Stride", String(format: "%.2f m", stride / 100))) }
+        if isPaceSport, let gct = d?.groundContactTime, gct > 0 { dynamics.append(("Ground contact", "\(Int(gct)) ms")) }
+        if isPaceSport, let vo = d?.verticalOscillation, vo > 0 { dynamics.append(("Vertical osc.", String(format: "%.1f cm", vo))) }
+        if isPaceSport, let vr = d?.verticalRatio, vr > 0 { dynamics.append(("Vertical ratio", String(format: "%.1f%%", vr))) }
 
         var power: [(String, String)] = []
         if let p = a.averagePower { power.append(("Avg power", "\(Int(p)) W")) }
@@ -268,7 +283,7 @@ struct StatGroups: View {
             StatGroup(title: "Overview", symbol: "chart.bar.fill", tint: activity.sport.color, items: overview),
             StatGroup(title: "Effort", symbol: "heart.fill", tint: .red, items: effort),
             StatGroup(title: "Body", symbol: "bolt.heart.fill", tint: .blue, items: body),
-            StatGroup(title: "Running dynamics", symbol: "figure.run", tint: .orange, items: dynamics),
+            StatGroup(title: "Running form", symbol: "figure.run", tint: .orange, items: dynamics),
             StatGroup(title: "Power", symbol: "bolt.fill", tint: .purple, items: power),
         ].filter { !$0.items.isEmpty }
     }
@@ -397,11 +412,14 @@ struct TrackCharts: View {
     @Environment(\.format) private var format
 
     private var toUnit: Double { format.imperial ? 1 / 1.609344 : 1 }
-    private var maxX: Double { max((analysis.samples.last?.km ?? 1) * toUnit, 0.01) }
+    /// Padel, gym, football: along time (minutes), since their "distance" means nothing.
+    private var byTime: Bool { !activity.hasDistance }
+    private func x(_ s: TrackAnalysis.Sample) -> Double { byTime ? s.time / 60 : s.km * toUnit }
+    private var maxX: Double { max(analysis.samples.last.map(x) ?? 1, 0.01) }
 
     var body: some View {
         let samples = analysis.samples
-        let selected = selectedKm.flatMap { x in samples.min { abs($0.km * toUnit - x) < abs($1.km * toUnit - x) } }
+        let selected = selectedKm.flatMap { x in samples.min { abs(self.x($0) - x) < abs(self.x($1) - x) } }
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
                 Text("Along the way").font(.title3.bold())
@@ -409,21 +427,25 @@ struct TrackCharts: View {
                 readout(selected)
             }
             if samples.contains(where: { $0.heartRate != nil }) { heartRate(samples, selected) }
-            if samples.contains(where: { ($0.speed ?? 0) > 0.3 }) { pace(samples, selected) }
+            if !byTime, samples.contains(where: { ($0.speed ?? 0) > 0.3 }) { pace(samples, selected) }
             if samples.contains(where: { $0.altitude != nil }) && !Sport.isIndoor(activity.typeKey) { elevation(samples, selected) }
-            if samples.filter({ ($0.cadence ?? 0) > 0 }).count > samples.count / 2 { cadence(samples, selected) }
+            if isPaceSport, samples.filter({ ($0.cadence ?? 0) > 0 }).count > samples.count / 2 { cadence(samples, selected) }
             if samples.filter({ ($0.power ?? 0) > 0 }).count > samples.count / 2 { power(samples, selected) }
         }
         .padding(18)
-        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 18))
+        .card()
     }
 
     @ViewBuilder
     private func readout(_ s: TrackAnalysis.Sample?) -> some View {
         if let s {
             HStack(spacing: 14) {
-                Text(format.distance(s.km * 1000)).fontWeight(.semibold)
-                Text(Format.duration(s.time)).foregroundStyle(.secondary)
+                if byTime {
+                    Text(Format.duration(s.time)).fontWeight(.semibold)
+                } else {
+                    Text(format.distance(s.km * 1000)).fontWeight(.semibold)
+                    Text(Format.duration(s.time)).foregroundStyle(.secondary)
+                }
                 if let hr = s.heartRate { Label("\(Int(hr))", systemImage: "heart.fill").foregroundStyle(.red) }
                 if let v = s.speed, v > 0.3 {
                     Label(isPaceSport ? format.pace(secondsPerKm: 1000 / v) : format.speed(metresPerSecond: v), systemImage: "speedometer")
@@ -448,7 +470,7 @@ struct TrackCharts: View {
                     AxisMarks { value in
                         AxisGridLine()
                         AxisValueLabel {
-                            if let v = value.as(Double.self) { Text("\(v.formatted(.number.precision(.fractionLength(0...1)))) \(format.distanceUnit)") }
+                            if let v = value.as(Double.self) { Text(byTime ? "\(Int(v)) min" : "\(v.formatted(.number.precision(.fractionLength(0...1)))) \(format.distanceUnit)") }
                         }
                     }
                 }
@@ -461,7 +483,7 @@ struct TrackCharts: View {
     @ChartContentBuilder
     private func cursor(_ s: TrackAnalysis.Sample?) -> some ChartContent {
         if let s {
-            RuleMark(x: .value("At", s.km * toUnit))
+            RuleMark(x: .value("At", x(s)))
                 .foregroundStyle(.primary.opacity(0.35))
                 .lineStyle(StrokeStyle(lineWidth: 1))
         }
@@ -501,9 +523,9 @@ struct TrackCharts: View {
         return frame("Heart rate", "heart.fill", .red, height: 150) {
             Chart {
                 ForEach(samples.filter { $0.heartRate != nil }) { s in
-                    AreaMark(x: .value("Distance", s.km * toUnit), yStart: .value("Base", domain.lowerBound), yEnd: .value("bpm", s.heartRate!))
+                    AreaMark(x: .value("Distance", x(s)), yStart: .value("Base", domain.lowerBound), yEnd: .value("bpm", s.heartRate!))
                         .foregroundStyle(style)
-                    LineMark(x: .value("Distance", s.km * toUnit), y: .value("bpm", s.heartRate!))
+                    LineMark(x: .value("Distance", x(s)), y: .value("bpm", s.heartRate!))
                         .foregroundStyle(.red)
                         .lineStyle(StrokeStyle(lineWidth: 1.5))
                 }
@@ -532,7 +554,7 @@ struct TrackCharts: View {
         return frame(isPaceSport ? "Pace" : "Speed", "speedometer", activity.sport.color) {
             Chart {
                 ForEach(moving) { s in
-                    LineMark(x: .value("Distance", s.km * toUnit),
+                    LineMark(x: .value("Distance", x(s)),
                              y: .value("Pace", min(max(sign * value(s.speed!), domain.lowerBound), domain.upperBound)))
                         .interpolationMethod(.catmullRom)
                         .foregroundStyle(activity.sport.color)
@@ -569,9 +591,9 @@ struct TrackCharts: View {
         return frame("Elevation", "mountain.2.fill", .green, height: 110) {
             Chart {
                 ForEach(samples.filter { $0.altitude != nil }) { s in
-                    AreaMark(x: .value("Distance", s.km * toUnit), yStart: .value("Base", domain.lowerBound), yEnd: .value("m", s.altitude!))
+                    AreaMark(x: .value("Distance", x(s)), yStart: .value("Base", domain.lowerBound), yEnd: .value("m", s.altitude!))
                         .foregroundStyle(LinearGradient(colors: [.green.opacity(0.55), .green.opacity(0.08)], startPoint: .top, endPoint: .bottom))
-                    LineMark(x: .value("Distance", s.km * toUnit), y: .value("m", s.altitude!))
+                    LineMark(x: .value("Distance", x(s)), y: .value("m", s.altitude!))
                         .foregroundStyle(.green)
                         .lineStyle(StrokeStyle(lineWidth: 1.2))
                 }
@@ -591,7 +613,7 @@ struct TrackCharts: View {
         return frame(isPaceSport ? "Cadence (spm)" : "Cadence (rpm)", "metronome.fill", .orange, height: 90) {
             Chart {
                 ForEach(points) { s in
-                    PointMark(x: .value("Distance", s.km * toUnit), y: .value("Cadence", min(max(s.cadence! * factor, domain.lowerBound), domain.upperBound)))
+                    PointMark(x: .value("Distance", x(s)), y: .value("Cadence", min(max(s.cadence! * factor, domain.lowerBound), domain.upperBound)))
                         .symbolSize(6)
                         .foregroundStyle(.orange.opacity(0.7))
                 }
@@ -608,7 +630,7 @@ struct TrackCharts: View {
         return frame("Power (W)", "bolt.fill", .purple, height: 90) {
             Chart {
                 ForEach(points) { s in
-                    LineMark(x: .value("Distance", s.km * toUnit), y: .value("W", min(s.power!, top)))
+                    LineMark(x: .value("Distance", x(s)), y: .value("W", min(s.power!, top)))
                         .foregroundStyle(.purple)
                         .lineStyle(StrokeStyle(lineWidth: 1.2))
                 }
@@ -683,7 +705,7 @@ struct SplitsCard: View {
         }
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 18))
+        .card()
     }
 }
 
@@ -724,7 +746,7 @@ struct VersusUsual: View {
                 }
                 .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.background.secondary, in: RoundedRectangle(cornerRadius: 16))
+                .card()
             }
         }
         .task(id: activity.garminId) {
@@ -771,7 +793,7 @@ struct BestsCard: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 16))
+        .card()
     }
 }
 
@@ -812,7 +834,7 @@ struct ZonesCard: View {
             }
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.background.secondary, in: RoundedRectangle(cornerRadius: 16))
+            .card()
         }
     }
 }
@@ -835,7 +857,7 @@ struct EffectCard: View {
             }
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.background.secondary, in: RoundedRectangle(cornerRadius: 16))
+            .card()
         }
     }
 
@@ -858,13 +880,13 @@ struct BigStat: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(label.uppercased()).font(.caption2.weight(.bold)).tracking(0.8).foregroundStyle(.secondary)
+            Text(label).font(.subheadline).foregroundStyle(.secondary)
             Text(value).font(.system(size: 24, weight: .bold, design: .rounded)).monospacedDigit()
                 .lineLimit(1).minimumScaleFactor(0.6)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(tint.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+        .card()
     }
 }
 

@@ -95,3 +95,48 @@ struct MetricRow: View {
         }
     }
 }
+
+extension View {
+    /// The box every group in the app sits in: a quiet background, a hairline edge, the same corners.
+    func card(padding: CGFloat? = nil) -> some View {
+        self
+            .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(.separator.opacity(0.5)))
+    }
+}
+
+/// Cards in rows, as many across as fit, every card in a row as tall as the tallest one.
+/// (A lazy grid lets each card keep its own height, which leaves ragged rows.)
+struct CardGrid: View {
+    let minWidth: CGFloat
+    let spacing: CGFloat
+    let cards: [AnyView]
+    @State private var width: CGFloat = 900
+
+    init(minWidth: CGFloat = 260, spacing: CGFloat = 14, cards: [AnyView]) {
+        self.minWidth = minWidth
+        self.spacing = spacing
+        self.cards = cards
+    }
+
+    var body: some View {
+        let columns = max(1, min(cards.count, Int((width + spacing) / (minWidth + spacing))))
+        VStack(spacing: 0) {
+            Color.clear.frame(maxWidth: .infinity, maxHeight: 0)
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+            Grid(horizontalSpacing: spacing, verticalSpacing: spacing) {
+                ForEach(Array(stride(from: 0, to: cards.count, by: columns)), id: \.self) { start in
+                    GridRow(alignment: .top) {
+                        ForEach(start..<start + columns, id: \.self) { i in
+                            if i < cards.count {
+                                cards[i].frame(maxHeight: .infinity, alignment: .top)
+                            } else {
+                                Color.clear.gridCellUnsizedAxes([.vertical])
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

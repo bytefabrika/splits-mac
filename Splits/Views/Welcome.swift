@@ -6,11 +6,13 @@ struct LivelyBackground: View {
         (Sport.run.color, 0.0, 0.9), (Sport.ride.color, 2.1, 0.7), (Sport.swim.color, 4.2, 0.8),
         (Color.purple, 1.3, 0.6), (Sport.walk.color, 3.4, 0.75),
     ]
+    /// With Reduce Motion on, the background holds still (motion.md: motion is optional).
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let symbols = ["figure.run", "figure.outdoor.cycle", "figure.pool.swim", "heart.fill", "bed.double.fill",
                            "bolt.heart.fill", "figure.hiking", "mountain.2.fill", "stopwatch.fill", "flame.fill"]
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 30)) { context in
+        TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion)) { context in
             let t = context.date.timeIntervalSinceReferenceDate
             GeometryReader { geo in
                 ZStack {
@@ -46,6 +48,7 @@ struct OnboardingView: View {
     @State private var key = ""
     @State private var bounce = 0
     @Environment(\.openURL) private var openURL
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var cleaned: String { key.trimmingCharacters(in: .whitespacesAndNewlines) }
 
@@ -57,7 +60,15 @@ struct OnboardingView: View {
                     .font(.system(size: 76))
                     .foregroundStyle(.white, Sport.run.color)
                     .symbolEffect(.bounce, value: bounce)
-                    .onAppear { Timer.scheduledTimer(withTimeInterval: 2.6, repeats: true) { _ in bounce += 1 } }
+                    .accessibilityHidden(true)
+                    // Ends with the view, unlike a timer; skipped with Reduce Motion.
+                    .task {
+                        guard !reduceMotion else { return }
+                        while !Task.isCancelled {
+                            try? await Task.sleep(for: .seconds(2.6))
+                            bounce += 1
+                        }
+                    }
                 VStack(spacing: 8) {
                     Text("Every run, ride and night of sleep.")
                         .font(.system(size: 38, weight: .heavy, design: .rounded))
@@ -67,11 +78,13 @@ struct OnboardingView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                HStack(spacing: 12) {
+                HStack(alignment: .top, spacing: 12) {
                     StepCard(number: 1, symbol: "safari", text: "Open Personal API Key in Garmin Connect")
                     StepCard(number: 2, symbol: "key.fill", text: "Create a key and copy it")
                     StepCard(number: 3, symbol: "doc.on.clipboard", text: "Paste it here")
                 }
+                // Equal heights, so the numbered badges line up.
+                .fixedSize(horizontal: false, vertical: true)
 
                 VStack(spacing: 10) {
                     HStack(spacing: 10) {
@@ -126,7 +139,10 @@ private struct StepCard: View {
             Text(text).font(.callout).multilineTextAlignment(.center).frame(width: 150)
         }
         .padding(14)
+        .frame(maxHeight: .infinity, alignment: .top)
         .background(.background.opacity(0.6), in: RoundedRectangle(cornerRadius: 16))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Step \(number): \(text)")
     }
 }
 

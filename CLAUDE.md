@@ -42,3 +42,5 @@ A native macOS app that shows your own Garmin Connect data (activities, sleep, H
 
 ## Next
 - Name. Desktop widgets (Body Battery, sleep, weekly distance). FIT files per activity (routes on a map, laps, charts). Personal records from FIT data. Year in review. Developer ID signing, notarization, Sparkle updates, GitHub releases.
+- Screenshots of any screen (DEBUG): `open Splits.app --args -page trends` (today, activities, trends, records, explorer), `-openNewest YES` (with `-page activities`), `-showWelcome YES`, `-showFirstSync YES`, `-showSettings YES`. Then `screencapture -l<window id>`.
+- Look: titled `Panel`s and `.card()` boxes (Views/Panel.swift), colour only in symbols and charts, `Metric`/`MetricRow` for numbers, `CardGrid` for even-height card rows. A view that sizes itself from a measured width must not also set that width (`.frame(minWidth: 0, maxWidth: .infinity)` around it), or it never shrinks.
