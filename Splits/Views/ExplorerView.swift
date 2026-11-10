@@ -26,10 +26,12 @@ struct ExplorerView: View {
     /// A year picked in the list: the map shows only that year's countries and trips.
     @State private var year: Int?
     @State private var camera: MapCameraPosition = .automatic
-    @State private var hovered: (String, CGPoint)?
-    /// Where the map is looking now, so the mouse wheel can zoom from there.
-    @State private var current: MapCamera?
-    @State private var hovering = false
+    /// The tooltip and the camera change on every mouse move and every frame. They live in objects this view
+    /// never reads in `body`, so moving around doesn't rebuild 450 country shapes and the whole panel each time.
+    @State private var hover = HoverState()
+    @State private var cameraBox = CameraBox()
+    /// Only this flips the view, and only when crossing the zoom where city dots appear.
+    @State private var zoomedIn = false
     @State private var wheel: Any?
     /// The shapes for the countries on the map, worked out when they change rather than on every frame.
     @State private var shapes: [[CLLocationCoordinate2D]] = []
@@ -47,7 +49,7 @@ struct ExplorerView: View {
     }
 
     /// City dots only once zoomed in to a region; at world scale they'd be a smudge under the flags.
-    private var showCityDots: Bool { (current?.distance ?? .infinity) < 5_000_000 }
+    private var showCityDots: Bool { zoomedIn }
 
     /// Each pair of countries once, however often you went back and forth.
     private var shownLegs: [(from: Country, to: Country, date: Date)] {
@@ -157,23 +159,27 @@ struct ExplorerView: View {
             MapCompass()
             MapScaleView()
         }
-        .onMapCameraChange(frequency: .continuous) { current = $0.camera }
-        .onHover { hovering = $0 }
+        .onMapCameraChange(frequency: .continuous) { context in
+            cameraBox.camera = context.camera
+            let zoomed = context.camera.distance < 5_000_000
+            if zoomed != zoomedIn { zoomedIn = zoomed }
+        }
+        .onHover { cameraBox.hovering = $0 }
         .onContinuousHover { phase in
-            guard case .active(let p) = phase else { hovered = nil; return }
+            guard case .active(let p) = phase else { hover.text = nil; return }
             // Over a city dot: the city. Otherwise the country under the pointer.
             if showCityDots, let v = shownCities.first(where: { v in
                 proxy.convert(v.city.coordinate, to: .local).map { hypot($0.x - p.x, $0.y - p.y) < 9 } ?? false
             }) {
-                hovered = (describe(v), p)
+                hover.show(describe(v), at: p)
             } else if let c = proxy.convert(p, from: .local), let country = Atlas.shared.country(lat: c.latitude, lon: c.longitude) {
-                hovered = (describe(country), p)
+                hover.show(describe(country), at: p)
             } else {
-                hovered = nil
+                hover.text = nil
             }
         }
         .overlay(alignment: .topLeading) {
-            if let (text, p) = hovered { Tooltip(text: text).offset(x: p.x + 14, y: p.y + 10) }
+            HoverTooltip(state: hover)
         }
         .onAppear { startWheelZoom() }
         .onDisappear { if let wheel { NSEvent.removeMonitor(wheel) }; wheel = nil }
@@ -192,7 +198,7 @@ struct ExplorerView: View {
     private func startWheelZoom() {
         guard wheel == nil else { return }
         wheel = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
-            guard hovering, !event.hasPreciseScrollingDeltas, event.scrollingDeltaY != 0, let current else { return event }
+            guard cameraBox.hovering, !event.hasPreciseScrollingDeltas, event.scrollingDeltaY != 0, let current = cameraBox.camera else { return event }
             // Wheel up zooms in, down zooms out. MapKit stops at the whole world by itself.
             let factor = pow(1.35, -max(-4, min(4, event.scrollingDeltaY)))
             let distance = min(40_000_000, max(500, current.distance * factor))
@@ -362,5 +368,32 @@ struct Tooltip: View {
             .background(Color.black.opacity(0.82), in: RoundedRectangle(cornerRadius: 8))
             .fixedSize()
             .allowsHitTesting(false)
+    }
+}
+
+/// What the pointer is over. Only `HoverTooltip` reads it, so only the tooltip redraws as the mouse moves.
+@Observable
+final class HoverState {
+    var text: String?
+    var point: CGPoint = .zero
+
+    func show(_ text: String, at point: CGPoint) {
+        if self.text != text { self.text = text }
+        self.point = point
+    }
+}
+
+/// The camera as it moves, for the mouse-wheel zoom. Not observed: writing it redraws nothing.
+final class CameraBox {
+    var camera: MapCamera?
+    var hovering = false
+}
+
+struct HoverTooltip: View {
+    let state: HoverState
+    var body: some View {
+        if let text = state.text {
+            Tooltip(text: text).offset(x: state.point.x + 14, y: state.point.y + 10)
+        }
     }
 }
