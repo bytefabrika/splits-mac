@@ -56,6 +56,8 @@ struct SplitsApp: App {
             print("defaults: \(UserDefaults.standard.string(forKey: DailyBriefing.dateKey) ?? "–") notified \(UserDefaults.standard.string(forKey: DailyBriefing.notifiedKey) ?? "–")")
             exit(0)
         }
+        // `Splits --trends-test > trends.png`: the Trends calendar and summary with the real store, to look at.
+        if CommandLine.arguments.contains("--trends-test") { DebugSync.trends(container: container) }
         // `Splits --card-test < activity.zip > card.png`: the share card for the newest activity, with that file's route.
         if CommandLine.arguments.contains("--card-test") { DebugSync.card(container: container) }
         #endif
@@ -241,6 +243,39 @@ enum DebugSync {
             exit(0)
         }
         RunLoop.main.run()
+    }
+
+    @MainActor
+    static func trends(container: ModelContainer) {
+        let all = (try? ModelContext(container).fetch(FetchDescriptor<Activity>())) ?? []
+        let year = all.filter { $0.start > Date().addingTimeInterval(-365 * 86_400) }
+        let format = Format(units: "metric")
+        let view = VStack(alignment: .leading, spacing: 28) {
+            Panel(title: "Summary", subtitle: "The last 1 year") {
+                MetricRow(metrics: [
+                    Metric(label: "Activities", symbol: "figure.mixed.cardio", tint: Sport.run.color, value: year.count.formatted()),
+                    Metric(label: "Distance", symbol: "point.topleft.down.to.point.bottomright.curvepath", tint: Sport.ride.color, value: format.distance(year.reduce(0) { $0 + $1.distance }, decimals: 0)),
+                    Metric(label: "Time moving", symbol: "stopwatch", tint: Sport.swim.color, value: "259 h"),
+                    Metric(label: "Climbed", symbol: "mountain.2", tint: Sport.hike.color, value: "7,403 m"),
+                    Metric(label: "Sleep", symbol: "bed.double", tint: .indigo, value: "6 h 43 min", note: "a night on average"),
+                    Metric(label: "HRV", symbol: "waveform.path.ecg", tint: .teal, value: "75 ms", note: "overnight average"),
+                ])
+            }
+            ActivityCalendar(activities: all)
+            Panel(title: "Records", subtitle: "In the last 1 year") {
+                HStack { RecordCell(title: "Longest run", value: "32.75 km", activity: all.first); RecordCell(title: "Biggest climb", value: "1,204 m", activity: all.last) }
+            }
+        }
+        .padding(24)
+        .frame(width: 1180)
+        .background(Color(nsColor: .windowBackgroundColor))
+        let renderer = ImageRenderer(content: view)
+        renderer.scale = 1.5
+        if let tiff = renderer.nsImage?.tiffRepresentation,
+           let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
+            FileHandle.standardOutput.write(png)
+        }
+        exit(0)
     }
 
     static func card(container: ModelContainer) {

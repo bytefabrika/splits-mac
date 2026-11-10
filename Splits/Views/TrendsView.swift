@@ -20,6 +20,9 @@ struct TrendsView: View {
     @Environment(\.format) private var format
     @State private var range: Range = .year
 
+    /// "the last year", "the last 3 months"
+    private var period: String { range == .year ? "the last year" : "the last \(range.rawValue)" }
+
     private var since: Date {
         range.days.map { Calendar.current.date(byAdding: .day, value: -$0, to: Date())! } ?? .distantPast
     }
@@ -31,26 +34,19 @@ struct TrendsView: View {
 
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    Picker("Range", selection: $range) {
-                        ForEach(Range.allCases) { Text($0.rawValue).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .frame(maxWidth: 360)
-
+                VStack(alignment: .leading, spacing: 28) {
                     highlights(activities, days)
                     ActivityCalendar(activities: allActivities)
                     yearOverYear
 
-                    HStack(alignment: .top, spacing: 18) {
+                    HStack(alignment: .top, spacing: 20) {
                         weeklyDistance(activities)
                         sportMix(activities).frame(width: 320)
                     }
                     weeklyLoad(activities)
                     aerobicForm(since: since)
                     sleepStages(days)
-                    HStack(alignment: .top, spacing: 18) {
+                    HStack(alignment: .top, spacing: 20) {
                         hrv(days)
                         restingHR(days)
                     }
@@ -62,11 +58,24 @@ struct TrendsView: View {
                     }
                 }
                 .padding(24)
+                .frame(maxWidth: 1240)
                 // Take hits everywhere, so the scroll wheel works over empty space too.
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
             }
             .navigationTitle("Trends")
+            .toolbar {
+                // A segmented control in the toolbar switches what the whole view shows (segmented-controls.md, macOS).
+                ToolbarItem(placement: .principal) {
+                    Picker("Range", selection: $range) {
+                        ForEach(Range.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .fixedSize()
+                    .help("How far back the summary and charts go")
+                }
+            }
             .navigationDestination(for: Int64.self) { id in
                 if let activity = allActivities.first(where: { $0.garminId == id }) { ActivityPage(activity: activity) }
             }
@@ -81,13 +90,16 @@ struct TrendsView: View {
         let climb = activities.filter { !Sport.isIndoor($0.typeKey) }.reduce(0) { $0 + $1.elevationGain }
         let sleep = average(days.compactMap(\.sleepSeconds))
         let hrv = average(days.compactMap(\.hrvLastNight))
-        return LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
-            BigStat(label: "Activities", value: activities.count.formatted(), tint: Sport.run.color)
-            BigStat(label: "Distance", value: format.distance(distance, decimals: 0), tint: Sport.ride.color)
-            BigStat(label: "Time moving", value: "\(Int(seconds / 3600)) h", tint: Sport.swim.color)
-            BigStat(label: "Climbed", value: format.elevation(climb), tint: Sport.hike.color)
-            if let sleep { BigStat(label: "Avg sleep", value: Format.hoursMinutes(sleep), tint: .indigo) }
-            if let hrv { BigStat(label: "Avg HRV", value: "\(hrv) ms", tint: .teal) }
+        var metrics = [
+            Metric(label: "Activities", symbol: "figure.mixed.cardio", tint: Sport.run.color, value: activities.count.formatted()),
+            Metric(label: "Distance", symbol: "point.topleft.down.to.point.bottomright.curvepath", tint: Sport.ride.color, value: format.distance(distance, decimals: 0)),
+            Metric(label: "Time moving", symbol: "stopwatch", tint: Sport.swim.color, value: "\(Int(seconds / 3600)) h"),
+            Metric(label: "Climbed", symbol: "mountain.2", tint: Sport.hike.color, value: format.elevation(climb)),
+        ]
+        if let sleep { metrics.append(Metric(label: "Sleep", symbol: "bed.double", tint: .indigo, value: Format.hoursMinutes(sleep), note: "a night on average")) }
+        if let hrv { metrics.append(Metric(label: "HRV", symbol: "waveform.path.ecg", tint: .teal, value: "\(hrv) ms", note: "overnight average")) }
+        return Panel(title: "Summary", subtitle: range == .all ? "Everything since your first activity" : period.prefix(1).uppercased() + period.dropFirst()) {
+            MetricRow(metrics: metrics)
         }
     }
 
@@ -297,22 +309,16 @@ struct TrendsView: View {
         let compareDate = range == .all ? yearAgo : since
         let change: Double? = form.now.flatMap { now in form.trend(at: compareDate).map { now - $0 } }
 
-        return VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
-                Label("Aerobic form", systemImage: "heart.circle.fill").font(.headline).foregroundStyle(Sport.run.color)
-                Spacer()
-                Text("Your pace at \(form.reference) bpm, from \(form.points.count) outdoor runs")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
+        return Panel(title: "Aerobic form", subtitle: "Your running pace at \(form.reference) bpm, from \(form.points.count) outdoor runs") {
             if let now = form.now {
                 HStack(alignment: .firstTextBaseline, spacing: 14) {
                     Text(format.pace(secondsPerKm: now))
-                        .font(.system(size: 34, weight: .heavy, design: .rounded)).monospacedDigit()
+                        .font(.system(.largeTitle, design: .rounded).weight(.semibold)).monospacedDigit()
                     Text("at \(form.reference) bpm, last 30 days").foregroundStyle(.secondary)
                     if let change, abs(change) >= 1 {
                         let faster = change < 0
                         let seconds = Int(abs(format.imperial ? change * 1.609344 : change).rounded())
-                        Label("\(seconds) s/\(format.distanceUnit) \(faster ? "faster" : "slower") than \(range == .all ? "a year ago" : "\(range.rawValue) ago")",
+                        Label("\(seconds) s/\(format.distanceUnit) \(faster ? "faster" : "slower") than \(range == .all || range == .year ? "a year ago" : "\(range.rawValue) ago")",
                               systemImage: faster ? "arrow.down.right" : "arrow.up.right")
                             .font(.callout.weight(.semibold))
                             .foregroundStyle(faster ? .green : .orange)
@@ -346,8 +352,6 @@ struct TrendsView: View {
                 Text("Needs outdoor runs of 3 km or more with heart rate.").foregroundStyle(.secondary)
             }
         }
-        .padding(16)
-        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 14))
     }
 
     // MARK: Records
@@ -369,23 +373,11 @@ struct TrendsView: View {
             ("Hardest effort", activities.max { ($0.trainingLoad ?? 0) < ($1.trainingLoad ?? 0) }.flatMap { $0.trainingLoad.map { "Load \(Int($0))" } } ?? "–",
              activities.max { ($0.trainingLoad ?? 0) < ($1.trainingLoad ?? 0) }),
         ]
-        return VStack(alignment: .leading, spacing: 10) {
-            Label("Records in this period", systemImage: "trophy.fill").font(.headline).foregroundStyle(.orange)
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 230), spacing: 12)], spacing: 12) {
+        return Panel(title: "Records", subtitle: range == .all ? "All time" : "In \(period)") {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 16, alignment: .top)], alignment: .leading, spacing: 16) {
                 ForEach(items, id: \.0) { title, value, activity in
                     NavigationLink(value: activity?.garminId ?? 0) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(title.uppercased()).font(.caption2.weight(.bold)).tracking(0.8).foregroundStyle(.secondary)
-                            Text(value).font(.system(size: 22, weight: .bold, design: .rounded)).monospacedDigit()
-                            if let activity {
-                                Text("\(activity.name.isEmpty ? Format.title(activity.typeKey) : activity.name) · \(activity.start.formatted(date: .abbreviated, time: .omitted))")
-                                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                            }
-                        }
-                        .padding(14)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
-                        .contentShape(Rectangle())
+                        RecordCell(title: title, value: value, activity: activity)
                     }
                     .buttonStyle(.plain)
                     .disabled(activity == nil)
@@ -399,111 +391,145 @@ struct TrendsView: View {
     }
 }
 
-struct StreakStat: View {
-    let symbol: String
-    let tint: Color
+/// One record: what, the number, and which activity it was. Hovering shows it opens.
+struct RecordCell: View {
+    let title: String
     let value: String
-    let label: String
-    let note: String
+    let activity: Activity?
+    @State private var hovering = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: symbol).font(.title2).foregroundStyle(tint).frame(width: 28)
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(alignment: .firstTextBaseline, spacing: 5) {
-                    Text(value).font(.system(size: 26, weight: .heavy, design: .rounded)).monospacedDigit()
-                    Text(label).font(.callout.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.8)
+            Image(systemName: "trophy").foregroundStyle(.orange).frame(width: 18)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.subheadline).foregroundStyle(.secondary)
+                Text(value).font(.system(.title3, design: .rounded).weight(.semibold)).monospacedDigit()
+                if let activity {
+                    Text("\(activity.name.isEmpty ? Format.title(activity.typeKey) : activity.name) · \(activity.start.formatted(date: .abbreviated, time: .omitted))")
+                        .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
-                Text(note).font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer(minLength: 0)
+            if activity != nil {
+                Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary).opacity(hovering ? 1 : 0)
+            }
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(tint.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+        .padding(8)
+        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.primary.opacity(hovering ? 0.06 : 0)))
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 && activity != nil }
+        .accessibilityElement(children: .combine)
     }
 }
 
-/// The last 53 weeks as a grid of days, darker the more you moved. Like a GitHub contribution graph.
+/// The last 53 weeks as a grid of days, darker the more you moved, with streaks above it.
 struct ActivityCalendar: View {
     let activities: [Activity]
     @AppStorage("calendarRunsOnly") private var runsOnly = true
+    @State private var width: CGFloat = 800
+
+    private static let gap: CGFloat = 3
+    private static let labelWidth: CGFloat = 30
 
     var body: some View {
-        let activities = runsOnly ? activities.filter { $0.sport == .run } : activities
-        let noun = runsOnly ? "runs" : "activities"
         let calendar = Calendar.current
+        let shown = runsOnly ? activities.filter { $0.sport == .run } : activities
+        let noun = runsOnly ? "runs" : "activities"
         let today = calendar.startOfDay(for: Date())
         let firstWeek = calendar.dateInterval(of: .weekOfYear, for: calendar.date(byAdding: .weekOfYear, value: -52, to: today)!)!.start
         var minutes: [Date: Double] = [:]
-        for a in activities where a.start >= firstWeek {
+        for a in shown where a.start >= firstWeek {
             minutes[calendar.startOfDay(for: a.start), default: 0] += a.activeSeconds / 60
         }
-        let activeDays = minutes.count
         let weeks = (0..<53).map { calendar.date(byAdding: .weekOfYear, value: $0, to: firstWeek)! }
-        let streaks = Streaks(dates: activities.map(\.start))
+        let streaks = Streaks(dates: shown.map(\.start))
+        let cell = max(6, min(22, (width - Self.labelWidth - 52 * Self.gap) / 53))
 
-        return VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Your last 12 months").font(.headline)
-                Picker("Show", selection: $runsOnly) {
-                    Text("Running").tag(true)
-                    Text("Everything").tag(false)
+        return Panel(title: "Last 12 months", subtitle: "\(minutes.count) active days") {
+            Picker("Show", selection: $runsOnly) {
+                Text("Running").tag(true)
+                Text("Everything").tag(false)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .controlSize(.small)
+            .fixedSize()
+            .help("Count runs only, or every activity")
+        } content: {
+            MetricRow(metrics: [
+                Metric(label: "Streak", symbol: "flame", tint: .orange,
+                       value: "\(streaks.currentDays) \(streaks.currentDays == 1 ? "day" : "days")",
+                       note: "Longest \(streaks.longestDays) days" + (streaks.longestDaysEnd.map { ", to \($0.formatted(.dateTime.day().month(.abbreviated).year()))" } ?? "")),
+                Metric(label: "Weeks with \(streaks.perWeek)+ \(noun)", symbol: "calendar", tint: .green,
+                       value: "\(streaks.currentWeeks) in a row", note: "Longest \(streaks.longestWeeks) weeks"),
+                Metric(label: "This week", symbol: "figure.run", tint: Sport.run.color,
+                       value: "\(streaks.thisWeek) \(streaks.thisWeek == 1 ? String(noun.dropLast()) : noun)",
+                       note: streaks.thisWeek >= streaks.perWeek ? "Streak kept for this week" : "\(streaks.perWeek - streaks.thisWeek) more to keep the streak"),
+                Metric(label: "Busiest week", symbol: "star", tint: .yellow, value: "\(streaks.bestWeek) \(noun)"),
+            ])
+            Divider()
+            VStack(alignment: .leading, spacing: 4) {
+                // Month names over the week each month starts in.
+                ZStack(alignment: .topLeading) {
+                    ForEach(weeks.indices, id: \.self) { i in
+                        let week = weeks[i]
+                        let monthStart = calendar.dateInterval(of: .month, for: calendar.date(byAdding: .day, value: 6, to: week)!)!.start
+                        if i == 0 || (monthStart >= week && monthStart <= calendar.date(byAdding: .day, value: 6, to: week)!), i < 51 {
+                            Text(monthStart.formatted(.dateTime.month(.abbreviated)))
+                                .font(.caption2).foregroundStyle(.secondary)
+                                .offset(x: Self.labelWidth + CGFloat(i) * (cell + Self.gap))
+                        }
+                    }
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
-                .padding(.leading, 8)
-                Spacer()
-                Text("\(activeDays) active days").font(.caption).foregroundStyle(.secondary)
-            }
-            HStack(spacing: 10) {
-                StreakStat(symbol: "flame.fill", tint: .orange, value: "\(streaks.currentDays)",
-                           label: streaks.currentDays == 1 ? "day in a row" : "days in a row",
-                           note: "Longest \(streaks.longestDays)" + (streaks.longestDaysEnd.map { ", ended \($0.formatted(.dateTime.day().month(.abbreviated).year()))" } ?? ""))
-                StreakStat(symbol: "calendar.badge.checkmark", tint: .green, value: "\(streaks.currentWeeks)",
-                           label: streaks.currentWeeks == 1 ? "week with \(streaks.perWeek)+ \(noun)" : "weeks in a row with \(streaks.perWeek)+ \(noun)",
-                           note: "Longest \(streaks.longestWeeks) weeks")
-                StreakStat(symbol: "figure.run", tint: Sport.run.color, value: "\(streaks.thisWeek)",
-                           label: "\(noun) this week",
-                           note: streaks.thisWeek >= streaks.perWeek ? "Week done ✓" : "\(streaks.perWeek - streaks.thisWeek) more to keep the streak")
-                StreakStat(symbol: "star.fill", tint: .yellow, value: "\(streaks.bestWeek)", label: "in your busiest week", note: "\(noun.capitalized) in one week")
-            }
-            GeometryReader { geo in
-                let cell = min((geo.size.width - 52 * 3) / 53, 16)
-                HStack(alignment: .top, spacing: 3) {
-                    ForEach(weeks, id: \.self) { week in
-                        VStack(spacing: 3) {
-                            ForEach(0..<7, id: \.self) { offset in
-                                let day = calendar.date(byAdding: .day, value: offset, to: week)!
-                                let value = minutes[day] ?? 0
-                                RoundedRectangle(cornerRadius: 3)
-                                    .fill(day > today ? Color.clear : color(for: value))
-                                    .frame(width: cell, height: cell)
-                                    .help(day > today ? "" : "\(day.formatted(date: .abbreviated, time: .omitted)): \(Int(value)) min")
+                .frame(height: 13, alignment: .topLeading)
+                HStack(alignment: .top, spacing: 0) {
+                    VStack(alignment: .leading, spacing: Self.gap) {
+                        ForEach(0..<7, id: \.self) { row in
+                            Text(row % 2 == 0 ? calendar.shortWeekdaySymbols[(row + calendar.firstWeekday - 1) % 7] : "")
+                                .font(.caption2).foregroundStyle(.secondary)
+                                .frame(height: cell)
+                        }
+                    }
+                    .frame(width: Self.labelWidth, alignment: .leading)
+                    HStack(alignment: .top, spacing: Self.gap) {
+                        ForEach(weeks, id: \.self) { week in
+                            VStack(spacing: Self.gap) {
+                                ForEach(0..<7, id: \.self) { offset in
+                                    let day = calendar.date(byAdding: .day, value: offset, to: week)!
+                                    let value = minutes[day] ?? 0
+                                    RoundedRectangle(cornerRadius: cell / 4, style: .continuous)
+                                        .fill(day > today ? Color.clear : Self.color(for: value))
+                                        .frame(width: cell, height: cell)
+                                        .help(day > today ? "" : "\(day.formatted(date: .abbreviated, time: .omitted)): \(Int(value)) min")
+                                }
                             }
                         }
                     }
                 }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(minutes.count) active days in the last 12 months")
+                HStack(spacing: 4) {
+                    Spacer()
+                    Text("Less").font(.caption2).foregroundStyle(.secondary)
+                    ForEach([0.0, 20, 45, 75, 120], id: \.self) {
+                        RoundedRectangle(cornerRadius: 2, style: .continuous).fill(Self.color(for: $0)).frame(width: 10, height: 10)
+                    }
+                    Text("More").font(.caption2).foregroundStyle(.secondary)
+                }
+                .padding(.top, 4)
             }
-            .frame(height: 7 * 16 + 6 * 3)
-            HStack(spacing: 4) {
-                Text("Less").font(.caption2).foregroundStyle(.secondary)
-                ForEach([0.0, 20, 45, 75, 120], id: \.self) { RoundedRectangle(cornerRadius: 2).fill(color(for: $0)).frame(width: 10, height: 10) }
-                Text("More").font(.caption2).foregroundStyle(.secondary)
-            }
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         }
-        .padding(16)
-        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 14))
     }
 
-    private func color(for minutes: Double) -> Color {
+    /// The system green in four steps, so it follows light and dark appearance and increased contrast.
+    private static func color(for minutes: Double) -> Color {
         switch minutes {
-        case 0: Color.secondary.opacity(0.12)
-        case ..<30: Sport.walk.color.opacity(0.35)
-        case ..<60: Sport.walk.color.opacity(0.6)
-        case ..<100: Sport.walk.color.opacity(0.85)
-        default: Color(red: 0.12, green: 0.6, blue: 0.3)
+        case 0: Color.primary.opacity(0.07)
+        case ..<30: Color.green.opacity(0.3)
+        case ..<60: Color.green.opacity(0.55)
+        case ..<100: Color.green.opacity(0.8)
+        default: Color.green
         }
     }
 }

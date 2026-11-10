@@ -230,17 +230,9 @@ struct ChartCard<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(title).font(.headline)
-                Spacer()
-                Text(subtitle).font(.caption).foregroundStyle(.secondary)
-            }
+        Panel(title: title, subtitle: subtitle) {
             content.frame(height: 200)
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 14))
     }
 }
 
