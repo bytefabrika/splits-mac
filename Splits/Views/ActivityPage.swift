@@ -930,11 +930,22 @@ struct CoachCard: View {
     @State private var text = ""
     @State private var writing = false
     @State private var failure: String?
-    /// Checked once when the card appears: asking the system on every redraw is wasted work.
-    @State private var status: Coach.Status = .unavailable("")
+    /// Checked when the card is made. (Checking in onAppear never ran: while the model wasn't known to be
+    /// ready the card was empty, and an empty view never appears.)
+    @State private var status: Coach.Status
+
+    init(activity: Activity, analysis: TrackAnalysis?) {
+        self.activity = activity
+        self.analysis = analysis
+        _status = State(initialValue: Coach.status)
+    }
 
     var body: some View {
-        content.onAppear { status = Coach.status }
+        VStack { content }
+            // Written once, the first time the activity is opened with its file loaded, then kept.
+            .task(id: analysis == nil) {
+                if status == .ready, activity.coachNote == nil, analysis != nil, !writing { await write() }
+            }
     }
 
     @ViewBuilder private var content: some View {
@@ -958,10 +969,21 @@ struct CoachCard: View {
                 }
                 let shown = writing ? text : (activity.coachNote ?? "")
                 if !shown.isEmpty {
-                    Text(Coach.withoutDashes(shown))
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .animation(.default, value: shown)
+                    let text = Coach.withoutDashes(shown)
+                    let lines = text.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: true)
+                    VStack(alignment: .leading, spacing: 8) {
+                        // The first line is a headline, set as one (older takes without one show as they are).
+                        if lines.count == 2, lines[0].count < 80 {
+                            Text(DailyBriefing.headline(String(lines[0]))).font(.title3.weight(.semibold))
+                            Text(lines[1].trimmingCharacters(in: .whitespacesAndNewlines))
+                        } else {
+                            Text(text)
+                        }
+                    }
+                    .textSelection(.enabled)
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .animation(.default, value: shown)
                 } else if !writing {
                     Button {
                         Task { await write() }
@@ -981,7 +1003,7 @@ struct CoachCard: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 LinearGradient(colors: [.purple.opacity(0.12), .pink.opacity(0.08), .orange.opacity(0.06)], startPoint: .topLeading, endPoint: .bottomTrailing),
-                in: RoundedRectangle(cornerRadius: 16)
+                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
             )
         }
     }

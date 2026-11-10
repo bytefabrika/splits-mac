@@ -27,15 +27,14 @@ enum Coach {
     }
 
     static let instructions = """
-    You are a friendly, knowledgeable endurance coach looking at one of the user's workouts from their Garmin watch.
-    Write a short take in plain English: 3 short paragraphs, no headings, no lists, under 150 words in total.
-    1. What kind of session this was and how it went, using the numbers given.
-    2. Pacing and effort: were the splits even, did they speed up or fade, what heart rate and zones say. Compare with \
-    their recent sessions of the same sport when that's given.
-    3. One practical suggestion for recovery or the next session, taking last night's sleep, HRV and Body Battery \
-    into account when given.
-    Only use the facts provided; never invent numbers. Be encouraging but honest. No medical advice.
-    Never use em dashes (—); use commas or full stops instead.
+    You are a warm, witty sports buddy writing a quick take on one of the user's workouts.
+    Write one short headline (under 8 words, one emoji that fits the sport), then two short paragraphs, under 80 \
+    words in total. First paragraph: how the session went, using the judgement lines (effort compared with usual, \
+    heart rate zones, and pacing only if a pacing judgement is given). Second paragraph: the suggestion for what's \
+    next, in your own friendly words.
+    Every sentence says something new; never repeat a point or start two sentences the same way. Use at most two \
+    numbers, taken from the judgement lines. Call the sport by its name in the facts. Never invent anything. \
+    No medical advice. No em dashes (—), no quotes, no markdown.
     """
 
     /// Streams the take. `onText` gets the text so far, on the main actor.
@@ -56,8 +55,10 @@ enum Coach {
     }
 
     /// The model still writes the odd em dash despite being asked not to: "a — b" and "a—b" become "a, b".
+    /// Also drops markdown bold, which it sometimes wraps the headline in.
     static func withoutDashes(_ text: String) -> String {
         text.replacingOccurrences(of: #"\s*—\s*"#, with: ", ", options: .regularExpression)
+            .replacingOccurrences(of: "**", with: "")
     }
 
     /// The workout as compact facts for the model. Units follow the user's settings.
@@ -72,43 +73,32 @@ enum Coach {
 
         lines.append("Workout: \(Format.title(activity.typeKey)) on \(activity.start.formatted(.dateTime.weekday(.wide).day().month(.wide).hour().minute()))"
                      + (activity.name.isEmpty ? "" : ", named \"\(activity.name)\""))
-        if activity.distance > 0 { lines.append("Distance: \(format.distance(activity.distance))") }
+        // Padel, gym or football record a few hundred metres of arm movement: not a distance to talk about.
+        if activity.hasDistance { lines.append("Distance: \(format.distance(activity.distance))") }
         lines.append(activity.sport.isDistanceSport
                      ? "Moving time: \(Format.duration(activity.movingDuration)) (elapsed \(Format.duration(activity.duration)))"
                      : "Duration: \(Format.duration(activity.duration))")
-        if let p = paceOrSpeed(activity) { lines.append((paceLike ? "Average pace: " : "Average speed: ") + p) }
+        if activity.hasDistance, let p = paceOrSpeed(activity) { lines.append((paceLike ? "Average pace: " : "Average speed: ") + p) }
         if activity.elevationGain > 0 && !Sport.isIndoor(activity.typeKey) { lines.append("Climb: \(format.elevation(activity.elevationGain))") }
         if Sport.isIndoor(activity.typeKey) { lines.append("Indoors (treadmill, trainer or similar).") }
         if let hr = activity.averageHR { lines.append("Heart rate: average \(Int(hr)), max \(Int(activity.maxHR ?? hr)) bpm") }
-        if activity.hrZones.count == 5 {
-            let total = max(activity.hrZones.reduce(0, +), 1)
-            lines.append("Time in heart rate zones 1–5: " + activity.hrZones.map { "\(Int($0 / total * 100))%" }.joined(separator: ", "))
-        }
+        // Zones and splits go in as judgements (below), not raw lists: given the lists, the model copies or
+        // misreads them.
         if let power = activity.averagePower { lines.append("Average power: \(Int(power)) W") }
-        if let cadence = activity.cadence { lines.append("Cadence: \(Int(cadence)) spm") }
+        if paceLike, let cadence = activity.cadence { lines.append("Cadence: \(Int(cadence)) spm") }
         if let te = activity.aerobicEffect {
             lines.append(String(format: "Garmin training effect: aerobic %.1f, anaerobic %.1f (out of 5)", te, activity.anaerobicEffect ?? 0))
         }
         if let load = activity.trainingLoad { lines.append("Training load: \(Int(load))") }
         if let t = activity.minTemperature { lines.append("Temperature: \(Int(t))–\(Int(activity.maxTemperature ?? t)) °C") }
 
-        if let analysis, !analysis.splits.isEmpty {
-            let unit = format.imperial ? "mile" : "km"
-            let splits = analysis.splits.prefix(45).map { s -> String in
-                let perMetre = s.seconds / s.length
-                return paceLike ? format.pace(secondsPerKm: perMetre * 1000) : format.speed(metresPerSecond: 1 / perMetre)
-            }
-            lines.append("Splits per \(unit), in order: " + splits.joined(separator: ", "))
-            if !analysis.bests.isEmpty, sport == .run {
-                lines.append("Fastest stretches: " + analysis.bests.map { "\($0.id) in \(Format.duration($0.seconds))" }.joined(separator: ", "))
-            }
-        }
-
         let same = recent.filter { $0.sport == sport && $0.garminId != activity.garminId && $0.start < activity.start }.prefix(10)
         if same.count >= 3 {
             let avgDistance = same.reduce(0) { $0 + $1.distance } / Double(same.count)
+            let avgTime = same.reduce(0) { $0 + $1.activeSeconds } / Double(same.count)
             let avgHR = same.compactMap(\.averageHR)
-            var line = "Their previous \(same.count) \(sport.label.lowercased()) sessions averaged \(format.distance(avgDistance))"
+            var line = "Their previous \(same.count) \(sport.label.lowercased()) sessions averaged "
+                + (activity.hasDistance ? format.distance(avgDistance) : Format.duration(avgTime))
             if paceLike {
                 let paces = same.compactMap(\.paceSecondsPerKm)
                 if !paces.isEmpty { line += " at \(format.pace(secondsPerKm: paces.reduce(0, +) / Double(paces.count)))" }
@@ -125,7 +115,86 @@ enum Coach {
             if let rhr = morning.restingHR { parts.append("resting heart rate \(rhr)") }
             if !parts.isEmpty { lines.append("That day: " + parts.joined(separator: "; ") + ".") }
         }
+        lines.append(contentsOf: judgements(activity: activity, analysis: analysis, recent: recent, format: format))
+        // The small model guesses at unfamiliar sports (it called padel tennis and pickleball): name it plainly.
+        lines.append("The sport is \(Format.title(activity.typeKey).lowercased()). Call it exactly that.")
         return lines.joined(separator: "\n")
+    }
+
+    // MARK: Judgements
+
+    /// What the numbers mean, worked out here rather than by the model, which reads numbers unreliably
+    /// (it called zone 4 at 0% "most time in zones 1 to 4"). The model repeats these in its own words.
+    static func judgements(activity: Activity, analysis: TrackAnalysis?, recent: [Activity], format: Format) -> [String] {
+        var out: [String] = []
+        let sport = activity.sport
+        let paceLike = [.run, .walk, .hike].contains(sport)
+
+        // Pacing, from the full splits (the last, shorter one left out).
+        if activity.hasDistance, let splits = analysis?.splits.filter({ $0.length > 900 }), splits.count >= 4 {
+            let paces = splits.map { $0.seconds / $0.length * 1000 }
+            let half = paces.count / 2
+            let first = paces.prefix(half).reduce(0, +) / Double(half)
+            let second = paces.suffix(paces.count - half).reduce(0, +) / Double(paces.count - half)
+            let spread = (paces.max() ?? 0) - (paces.min() ?? 0)
+            let diff = Int((second - first).rounded())
+            var line = "Pacing judgement: "
+            if spread > 45 {
+                line += "uneven, with big swings between splits (\(Int(spread)) s/km between fastest and slowest), as in intervals, hills or stops"
+            } else if diff <= -8 {
+                line += "a negative split: the second half was \(-diff) s/km faster than the first, which is well paced"
+            } else if diff >= 12 {
+                line += "faded: the second half was \(diff) s/km slower than the first"
+            } else {
+                line += "even, steady pacing from start to finish"
+            }
+            out.append(line + ".")
+        }
+
+        // Effort against the usual for this sport.
+        let same = recent.filter { $0.sport == sport && $0.garminId != activity.garminId && $0.start < activity.start }.prefix(10)
+        if same.count >= 3 {
+            var parts: [String] = []
+            if paceLike, activity.hasDistance, let pace = activity.paceSecondsPerKm {
+                let paces = same.compactMap(\.paceSecondsPerKm)
+                if !paces.isEmpty {
+                    let d = Int((pace - paces.reduce(0, +) / Double(paces.count)).rounded())
+                    parts.append(abs(d) < 8 ? "about their usual pace" : d < 0 ? "\(-d) s/km faster than their usual pace" : "\(d) s/km slower than their usual pace")
+                }
+            }
+            let hrs = same.compactMap(\.averageHR)
+            if let hr = activity.averageHR, !hrs.isEmpty {
+                let d = Int((hr - hrs.reduce(0, +) / Double(hrs.count)).rounded())
+                parts.append(abs(d) < 4 ? "at their usual heart rate" : d > 0 ? "at a heart rate \(d) bpm above their usual" : "at a heart rate \(-d) bpm below their usual")
+            }
+            let usual = same.reduce(0) { $0 + $1.activeSeconds } / Double(same.count)
+            let ratio = activity.activeSeconds / max(usual, 1)
+            if ratio > 1.3 { parts.append("longer than usual") } else if ratio < 0.7 { parts.append("shorter than usual") }
+            if !parts.isEmpty { out.append("Effort compared with usual: " + parts.joined(separator: ", ") + ".") }
+        }
+
+        // Heart rate zones in words.
+        if activity.hrZones.count == 5 {
+            let total = max(activity.hrZones.reduce(0, +), 1)
+            let pct = activity.hrZones.map { Int(($0 / total * 100).rounded()) }
+            let easy = pct[0] + pct[1], middle = pct[2], hard = pct[3] + pct[4]
+            let kind = hard >= 25 ? "a hard session, \(hard)% in zones 4 and 5"
+                : easy >= 70 ? "an easy aerobic session, \(easy)% in zones 1 and 2"
+                : "a moderate, steady effort, mostly zones 2 and 3"
+            out.append("Heart rate zones judgement: \(kind).")
+        }
+
+        // What next, from how hard it was.
+        let te = activity.aerobicEffect ?? 0
+        let next: String
+        switch te {
+        case 4...: next = "That was a big session: make the next day easy or a rest day."
+        case 3..<4: next = "A solid workout: an easy day next lets it sink in."
+        case 0.1..<3: next = "Light enough that a normal training day can follow."
+        default: next = "Keep the next session easy if the legs feel heavy."
+        }
+        out.append("Suggestion for what's next: \(next)")
+        return out
     }
 
     // MARK: Daily briefing

@@ -115,9 +115,10 @@ enum DebugSync {
     static func coach(container: ModelContainer) {
         Task { @MainActor in
             print("model status: \(Coach.status)")
-            var latest = FetchDescriptor<Activity>(predicate: #Predicate { $0.distance > 1000 }, sortBy: [SortDescriptor(\.start, order: .reverse)])
-            latest.fetchLimit = 1
-            guard let activity = try? container.mainContext.fetch(latest).first else { print("no activities in the store"); exit(0) }
+            // `COACH_TYPE=paddelball` picks the newest of that type; otherwise the newest over 1 km.
+            let type = ProcessInfo.processInfo.environment["COACH_TYPE"]
+            let all = (try? container.mainContext.fetch(FetchDescriptor<Activity>(sortBy: [SortDescriptor(\.start, order: .reverse)]))) ?? []
+            guard let activity = all.first(where: { a in type.map { a.typeKey == $0 } ?? (a.distance > 1000) }) else { print("no such activity"); exit(0) }
             var recentQuery = FetchDescriptor<Activity>(sortBy: [SortDescriptor(\.start, order: .reverse)])
             recentQuery.fetchLimit = 60
             let recent = (try? container.mainContext.fetch(recentQuery)) ?? []
