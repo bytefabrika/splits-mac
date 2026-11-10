@@ -238,6 +238,13 @@ struct Travels {
     var years: [Year] = []
     /// Every city, in the order first visited.
     var cities: [CityVisit] = []
+
+    /// How many and how far, for one place in one year.
+    struct Tally { var count = 0; var distance = 0.0 }
+    /// Year → country id → that year's activities there. For the map and lists when a year is picked.
+    var countryYears: [Int: [String: Tally]] = [:]
+    /// Year → city id → that year's activities there.
+    var cityYears: [Int: [Int: Tally]] = [:]
     var located = 0
 
     var continents: Set<String> { Set(visits.map(\.country.continent)) }
@@ -270,6 +277,8 @@ struct Travels {
             previous = c
             let y = calendar.component(.year, from: p.start)
             if !(perYear[y]?.contains(c) ?? false) { perYear[y, default: []].append(c) }
+            countryYears[y, default: [:]][c.id, default: Tally()].count += 1
+            countryYears[y, default: [:]][c.id, default: Tally()].distance += p.distance
             if firstYear[c.id] == nil { firstYear[c.id] = y }
 
             if let city = cityAtlas.city(lat: p.lat, lon: p.lon, iso: c.iso) {
@@ -282,6 +291,8 @@ struct Travels {
                     cityFirstYear[city.id] = y
                 }
                 citiesPerYear[y, default: []].insert(city.id)
+                cityYears[y, default: [:]][city.id, default: Tally()].count += 1
+                cityYears[y, default: [:]][city.id, default: Tally()].distance += p.distance
             }
         }
         cities = cityOrder.compactMap { cityByID[$0] }

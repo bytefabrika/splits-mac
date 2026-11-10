@@ -30,6 +30,12 @@ final class CountryTests: XCTestCase {
         XCTAssertEqual(t.years.map(\.year), [2026, 2025])
         XCTAssertEqual(t.years[0].countries.map(\.iso), ["NL", "FR"])
         XCTAssertEqual(t.years[0].new.map(\.iso), ["FR"])
+        // Per year: the Netherlands had 2 runs in 2025 and 1 in 2026, 3 in all.
+        let nl = t.visits[0].country.id
+        XCTAssertEqual(t.countryYears[2025]?[nl]?.count, 2)
+        XCTAssertEqual(t.countryYears[2026]?[nl]?.count, 1)
+        XCTAssertEqual(t.countryYears[2026]?[nl]?.distance, 10_000)
+        XCTAssertNil(t.countryYears[2026]?[t.visits[1].country.id])  // no Turkey in 2026
     }
 }
 

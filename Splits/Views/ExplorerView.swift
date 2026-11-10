@@ -24,7 +24,15 @@ struct ExplorerView: View {
     @State private var travels = Travels()
     @State private var loading = true
     /// A year picked in the list: the map shows only that year's countries and trips.
-    @State private var year: Int?
+    @State private var year: Int? = {
+        #if DEBUG
+        // `-explorerYear 2025`: opens with a year picked, for screenshots.
+        let y = UserDefaults.standard.integer(forKey: "explorerYear")
+        return y > 0 ? y : nil
+        #else
+        return nil
+        #endif
+    }()
     @State private var camera: MapCameraPosition = .automatic
     /// The tooltip and the camera change on every mouse move and every frame. They live in objects this view
     /// never reads in `body`, so moving around doesn't rebuild 450 country shapes and the whole panel each time.
@@ -53,7 +61,12 @@ struct ExplorerView: View {
 
     /// Each pair of countries once, however often you went back and forth.
     private var shownLegs: [(from: Country, to: Country, date: Date)] {
-        let legs = year.map { y in travels.legs.filter { Calendar.current.component(.year, from: $0.date) == y } } ?? travels.legs
+        // With a year picked, only trips between that year's countries: flying home on 1 January from last
+        // year's trip would otherwise draw a line to a country that isn't on this year's map.
+        let countries = Set(shownCountries)
+        let legs = year.map { y in
+            travels.legs.filter { Calendar.current.component(.year, from: $0.date) == y && countries.contains($0.from) && countries.contains($0.to) }
+        } ?? travels.legs
         var seen = Set<String>()
         return legs.filter { seen.insert([$0.from.id, $0.to.id].sorted().joined(separator: "-")).inserted }
     }
@@ -97,18 +110,34 @@ struct ExplorerView: View {
 
     // MARK: Map
 
-    /// "🇳🇱 Netherlands · 1,101 runs · 8,240 km", or just the name for a country you haven't been to.
-    private func describe(_ c: Country) -> String {
-        guard let v = travels.visits.first(where: { $0.country == c }) else { return "\(c.flag) \(c.name)" }
-        var text = "\(c.flag) \(c.name) · \(v.count) \(noun(v.count))"
-        if v.distance > 0 { text += " · \(format.distance(v.distance, decimals: 0))" }
+    /// The numbers for a place: that year's when a year is picked, otherwise all of them.
+    private func tally(_ c: Country) -> Travels.Tally? {
+        if let year { return travels.countryYears[year]?[c.id] }
+        return travels.visits.first { $0.country == c }.map { Travels.Tally(count: $0.count, distance: $0.distance) }
+    }
+
+    private func tally(_ v: Travels.CityVisit) -> Travels.Tally? {
+        if let year { return travels.cityYears[year]?[v.city.id] }
+        return Travels.Tally(count: v.count, distance: v.distance)
+    }
+
+    /// "1,101 runs · 8,240 km", or with a year picked "2025: 312 runs · 2,410 km", so it's clear which it is.
+    private func numbers(_ t: Travels.Tally) -> String {
+        var text = (year.map { "\($0): " } ?? "") + "\(t.count) \(noun(t.count))"
+        if t.distance > 0 { text += " · \(format.distance(t.distance, decimals: 0))" }
         return text
     }
 
+    /// "🇳🇱 Netherlands · 1,101 runs · 8,240 km". With a year picked, that year's numbers, or "none in 2025".
+    private func describe(_ c: Country) -> String {
+        if let t = tally(c) { return "\(c.flag) \(c.name) · \(numbers(t))" }
+        if let year, travels.visits.contains(where: { $0.country == c }) { return "\(c.flag) \(c.name) · none in \(year)" }
+        return "\(c.flag) \(c.name)"
+    }
+
     private func describe(_ v: Travels.CityVisit) -> String {
-        var text = "\(v.country.flag) \(v.city.name) · \(v.count) \(noun(v.count))"
-        if v.distance > 0 { text += " · \(format.distance(v.distance, decimals: 0))" }
-        return text
+        guard let t = tally(v) else { return "\(v.country.flag) \(v.city.name)" }
+        return "\(v.country.flag) \(v.city.name) · \(numbers(t))"
     }
 
     private func noun(_ n: Int) -> String {
@@ -225,21 +254,31 @@ struct ExplorerView: View {
         }
     }
 
+    /// The headline numbers: everything, or the year picked, saying which.
     private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        let picked = year.flatMap { y in travels.years.first { $0.year == y } }
+        let countries = picked?.countries.count ?? travels.visits.count
+        let cities = picked?.cities ?? travels.cities.count
+        let continents = picked.map { Set($0.countries.map(\.continent)).count } ?? travels.continents.count
+        return VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("\(travels.visits.count)")
-                    .font(.system(size: 56, weight: .heavy, design: .rounded))
+                Text("\(countries)")
+                    .font(.system(size: 56, weight: .bold, design: .rounded))
                     .contentTransition(.numericText())
-                Text(travels.visits.count == 1 ? "country" : "countries").font(.title2.weight(.bold))
+                Text((countries == 1 ? "country" : "countries") + (picked.map { " in \($0.year)" } ?? ""))
+                    .font(.title2.weight(.semibold))
             }
-            Text("\(travels.cities.count) \(travels.cities.count == 1 ? "city" : "cities") · \(travels.continents.count) \(travels.continents.count == 1 ? "continent" : "continents") · \(travels.legs.count) border crossings")
+            Text("\(cities) \(cities == 1 ? "city" : "cities") · \(continents) \(continents == 1 ? "continent" : "continents")"
+                 + (picked.map { " · \($0.new.count) new \($0.new.count == 1 ? "country" : "countries")" } ?? " · \(travels.legs.count) border crossings"))
                 .foregroundStyle(.secondary)
-            if let first = travels.visits.first {
+            if picked == nil, let first = travels.visits.first {
                 Text("Started in \(first.country.flag) \(first.country.name), \(first.first.formatted(.dateTime.month(.wide).year()))")
                     .font(.callout).foregroundStyle(.secondary)
+            } else if picked != nil {
+                Button("Show all years") { year = nil }.buttonStyle(.link).font(.callout)
             }
         }
+        .animation(.default, value: year)
     }
 
     private var perYearChart: some View {
@@ -301,7 +340,10 @@ struct ExplorerView: View {
     @State private var allCitiesShown = false
 
     private var topCities: some View {
-        let sorted = shownCities.sorted { ($0.count, $0.distance) > ($1.count, $1.distance) }
+        let sorted = shownCities.sorted {
+            let a = tally($0) ?? .init(), b = tally($1) ?? .init()
+            return (a.count, a.distance) > (b.count, b.distance)
+        }
         let list = allCitiesShown ? sorted : Array(sorted.prefix(10))
         return VStack(alignment: .leading, spacing: 6) {
             HStack {
@@ -318,10 +360,11 @@ struct ExplorerView: View {
                         Text("First \(v.first.formatted(.dateTime.day().month(.abbreviated).year()))").font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
+                    let t = tally(v) ?? .init()
                     VStack(alignment: .trailing, spacing: 0) {
-                        Text("\(v.count)×").font(.callout.monospacedDigit())
-                        if v.distance > 0 {
-                            Text(format.distance(v.distance, decimals: 0)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                        Text("\(t.count)×").font(.callout.monospacedDigit())
+                        if t.distance > 0 {
+                            Text(format.distance(t.distance, decimals: 0)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -336,20 +379,32 @@ struct ExplorerView: View {
 
     private var allCountries: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Every country, most \(noun(2)) first").font(.headline)
-            ForEach(Array(travels.visits.sorted { ($0.count, $0.distance) > ($1.count, $1.distance) }.enumerated()), id: \.element.id) { i, v in
+            Text(year.map { "Countries in \($0), most \(noun(2)) first" } ?? "Every country, most \(noun(2)) first").font(.headline)
+            let picked = year.flatMap { y in travels.years.first { $0.year == y } }
+            let shownVisits = travels.visits.filter { picked == nil || travels.countryYears[picked!.year]?[$0.id] != nil }
+            ForEach(Array(shownVisits.sorted {
+                let a = tally($0.country) ?? .init(), b = tally($1.country) ?? .init()
+                return (a.count, a.distance) > (b.count, b.distance)
+            }.enumerated()), id: \.element.id) { i, v in
                 HStack(spacing: 8) {
                     Text("\(i + 1)").font(.caption.monospacedDigit()).foregroundStyle(.secondary).frame(width: 22, alignment: .trailing)
                     Text(v.country.flag)
                     VStack(alignment: .leading, spacing: 0) {
-                        Text(v.country.name).font(.callout.weight(.semibold))
+                        HStack(spacing: 6) {
+                            Text(v.country.name).font(.callout.weight(.semibold))
+                            if let picked, picked.new.contains(v.country) {
+                                Text("New").font(.caption2.bold())
+                                    .padding(.horizontal, 5).padding(.vertical, 1)
+                                    .background(color.opacity(0.25), in: Capsule())
+                            }
+                        }
                         Text("First \(v.first.formatted(.dateTime.day().month(.abbreviated).year()))")
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
                     VStack(alignment: .trailing, spacing: 0) {
-                        Text("\(v.count)×").font(.callout.monospacedDigit())
-                        let cities = travels.cities.filter { $0.country == v.country }.count
+                        Text("\((tally(v.country) ?? .init()).count)×").font(.callout.monospacedDigit())
+                        let cities = travels.cities.filter { $0.country == v.country && (year == nil || travels.cityYears[year!]?[$0.city.id] != nil) }.count
                         Text("\(cities) \(cities == 1 ? "city" : "cities")").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                     }
                 }
