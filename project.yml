@@ -17,7 +17,9 @@ targets:
   Splits:
     type: application
     platform: macOS
-    sources: [Splits]
+    sources: [Splits, Shared]
+    dependencies:
+      - target: SplitsWidget
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.bytefabrika.splits
@@ -29,6 +31,20 @@ targets:
         CODE_SIGN_ENTITLEMENTS: Splits/Splits.entitlements
         # FoundationModels exists from macOS 26; the app still runs on 14 without the coach.
         OTHER_LDFLAGS: "-weak_framework FoundationModels"
+  SplitsWidget:
+    type: app-extension
+    platform: macOS
+    sources: [SplitsWidget, Shared]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.bytefabrika.splits.widget
+        PRODUCT_NAME: SplitsWidget
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_FILE: SplitsWidget/Info.plist
+        INFOPLIST_KEY_CFBundleDisplayName: Splits
+        INFOPLIST_KEY_NSHumanReadableCopyright: "© 2026 Bytefabrika"
+        CODE_SIGN_ENTITLEMENTS: SplitsWidget/SplitsWidget.entitlements
+        SKIP_INSTALL: YES
   SplitsTests:
     type: bundle.unit-test
     platform: macOS

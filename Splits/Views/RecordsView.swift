@@ -28,6 +28,7 @@ struct RecordsView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     if !finder.finished || finder.running { progress }
                     cards
+                    if !efforts.isEmpty { predictions }
                     if !efforts.isEmpty {
                         progression
                         byYear
@@ -122,6 +123,46 @@ struct RecordsView: View {
                 .disabled(e == nil)
             }
         }
+    }
+
+    // MARK: Race predictions
+
+    private var predictions: some View {
+        let predictor = RacePredictor(efforts: efforts.map { ($0.activity, $0.date, $0.label, $0.seconds) })
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                Label("If you raced today", systemImage: "flag.checkered").font(.headline).foregroundStyle(Sport.run.color)
+                Spacer()
+                Text("From your best efforts of the last \(predictor.months) months").font(.caption).foregroundStyle(.secondary)
+            }
+            if predictor.predictions.isEmpty {
+                Text("Needs a run of 5 km or more in the last year.").foregroundStyle(.secondary)
+            } else {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 190), spacing: 12)], spacing: 12) {
+                    ForEach(predictor.predictions) { p in
+                        NavigationLink(value: p.source.activity) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(p.label.uppercased()).font(.caption.weight(.heavy)).tracking(0.8).foregroundStyle(.secondary)
+                                Text(Format.duration(p.seconds))
+                                    .font(.system(size: 28, weight: .heavy, design: .rounded)).monospacedDigit()
+                                Text(format.pace(secondsPerKm: p.seconds / p.metres * 1000)).font(.callout.monospacedDigit()).foregroundStyle(.secondary)
+                                Text("From your \(p.source.label) of \(Format.duration(p.source.seconds)), \(p.source.date.formatted(.dateTime.day().month(.abbreviated)))")
+                                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                            }
+                            .padding(14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Sport.run.color.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                Text("Riegel's formula on the fastest stretches inside your runs. Training efforts are rarely all-out, so on a rested race day you'll often beat these. The marathon also needs the long runs to back it up.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .padding(16)
+        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 14))
     }
 
     // MARK: Progression

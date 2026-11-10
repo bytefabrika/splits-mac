@@ -44,3 +44,26 @@ final class StreakTests: XCTestCase {
         XCTAssertFalse(Records.plausible(distance: 1000, seconds: 120))  // 2:00 /km: a GPS jump
     }
 }
+
+final class RacePredictorTests: XCTestCase {
+    func testRiegel() {
+        let now = Date()
+        let recent = now.addingTimeInterval(-10 * 86_400)
+        let p = RacePredictor(efforts: [(1, recent, "10 km", 3000), (2, recent, "5 km", 1500), (3, recent, "1 km", 200)], now: now)
+        XCTAssertEqual(p.months, 4)
+        let byLabel = Dictionary(uniqueKeysWithValues: p.predictions.map { ($0.label, $0) })
+        // 5 km in 25:00 predicts a 10 km of 25:00 × 2^1.06 ≈ 52:08, slower than the 50:00 run, so the 10 km wins.
+        XCTAssertEqual(byLabel["10 km"]!.seconds, 3000, accuracy: 0.1)
+        XCTAssertEqual(byLabel["5 km"]!.seconds, 3000 * pow(0.5, 1.06), accuracy: 0.1)
+        XCTAssertEqual(byLabel["Half"]!.source.label, "10 km")
+        // The 1 km never counts.
+        XCTAssertFalse(p.predictions.contains { $0.source.label == "1 km" })
+    }
+
+    func testFallsBackToAYear() {
+        let old = Date().addingTimeInterval(-200 * 86_400)
+        let p = RacePredictor(efforts: [(1, old, "10 km", 3000)])
+        XCTAssertEqual(p.months, 12)
+        XCTAssertNil(RacePredictor(efforts: [(1, old, "5 km", 1500)]).predictions.first { $0.label == "Marathon" })
+    }
+}

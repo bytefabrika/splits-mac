@@ -269,6 +269,7 @@ struct ReportCard: View {
     @Environment(\.format) private var format
     @AppStorage private var savedDate: String
     @AppStorage private var savedText: String
+    @AppStorage(DailyBriefing.hadSleepKey) private var hadSleep = false
     @State private var text = ""
     @State private var writing = false
     @State private var failure: String?
@@ -294,7 +295,7 @@ struct ReportCard: View {
     var body: some View {
         VStack { content }
             .task(id: "\(status == .ready)-\(sleepSynced)") {
-                if kind == .daily, status == .ready, sleepSynced, savedDate != today, !writing { await write() }
+                if kind == .daily, status == .ready, sleepSynced, savedDate != today || !hadSleep, !writing { await write() }
             }
     }
 
@@ -357,10 +358,13 @@ struct ReportCard: View {
         text = ""
         defer { writing = false }
         let facts = kind.facts(activities, days, format)
+        let withSleep = sleepSynced
         do {
             try await Coach.write(facts: facts, instructions: kind.instructions, temperature: kind == .daily ? 0.4 : 0.6) { text = $0 }
             savedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
             savedDate = today
+            hadSleep = withSleep
+            if NSApp?.isActive == true { UserDefaults.standard.set(today, forKey: DailyBriefing.notifiedKey) }
         } catch {
             failure = "Couldn't write it: \(error.localizedDescription)"
         }

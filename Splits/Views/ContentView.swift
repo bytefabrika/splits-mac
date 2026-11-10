@@ -17,7 +17,8 @@ enum SidebarItem: String, CaseIterable, Identifiable {
 
 struct ContentView: View {
     @Environment(\.modelContext) private var context
-    @State private var sync: Sync?
+    /// Owned by the app, so the menu bar and the morning briefing can sync with the window closed.
+    let sync: Sync
     @State private var section: SidebarItem? = .today
     @State private var hasKey = Keychain.readKey() != nil
     /// Set once the first sync screen has been seen.
@@ -30,15 +31,15 @@ struct ContentView: View {
                     Keychain.saveKey(key)
                     hasKey = true
                     welcomed = false
-                    Task { await sync?.run() }
+                    Task { await sync.run() }
                 }
-            } else if let sync, !welcomed {
+            } else if !welcomed {
                 FirstSyncView(sync: sync, onDone: { welcomed = true }, onChangeKey: {
                     Keychain.deleteKey()
                     hasKey = false
                 })
                 .environment(\.format, Format(units: sync.units))
-            } else if let sync {
+            } else {
                 NavigationSplitView {
                     List(SidebarItem.allCases, selection: $section) { item in
                         Label(item.rawValue, systemImage: item.symbol).tag(item)
@@ -70,12 +71,11 @@ struct ContentView: View {
         }
         .frame(minWidth: 900, minHeight: 600)
         .onAppear {
-            if sync == nil { sync = Sync(context: context) }
             // Data from before the welcome screen existed: nothing to count up, go straight in.
-            if sync?.lastSync != nil && !(sync?.isRunning ?? false) { welcomed = true }
+            if sync.lastSync != nil && !sync.isRunning { welcomed = true }
             // Sync on launch, at most once an hour, or right away if start coordinates still need filling in.
             let needsBackfill = !UserDefaults.standard.bool(forKey: "coordinatesBackfilled")
-            if hasKey, let sync, needsBackfill || (sync.lastSync.map { Date().timeIntervalSince($0) > 3600 } ?? true) {
+            if hasKey, needsBackfill || (sync.lastSync.map { Date().timeIntervalSince($0) > 3600 } ?? true) {
                 Task { await sync.run() }
             }
         }
@@ -112,6 +112,8 @@ struct SyncStatus: View {
 
 extension Notification.Name {
     static let splitsKeyRemoved = Notification.Name("splitsKeyRemoved")
+    /// A sync or the menu bar's live refresh finished: the widgets redraw.
+    static let splitsDataChanged = Notification.Name("splitsDataChanged")
 }
 
 private struct FormatKey: EnvironmentKey {

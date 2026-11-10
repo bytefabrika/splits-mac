@@ -67,6 +67,7 @@ final class LiveToday {
             self.steps = steps.last?.totalSteps
             stepGoal = steps.last?.stepGoal
             updated = Date()
+            NotificationCenter.default.post(name: .splitsDataChanged, object: nil)
             problem = nil
         } catch {
             problem = error.localizedDescription

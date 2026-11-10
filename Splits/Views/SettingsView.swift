@@ -6,6 +6,7 @@ struct SettingsView: View {
     @State private var newKey = ""
     @State private var confirmRemove = false
     @State private var message: String?
+    @AppStorage(Mornings.notifyKey) private var morningNotification = true
 
     var body: some View {
         Form {
@@ -22,6 +23,12 @@ struct SettingsView: View {
                     Link("Manage keys in Garmin Connect", destination: URL(string: "https://connect.garmin.com/app/settings/personalApiToken")!)
                 }
                 if let message { Text(message).font(.caption).foregroundStyle(.secondary) }
+            }
+
+            Section("Morning briefing") {
+                Toggle("Send the briefing as a notification", isOn: $morningNotification)
+                Text("Once last night's sleep has synced, Splits writes the day's briefing on this Mac and sends its headline. Splits needs to be running, in the menu bar is enough.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
 
             Section("Your data") {

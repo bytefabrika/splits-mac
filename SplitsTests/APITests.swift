@@ -75,6 +75,11 @@ final class CoachFactsTests: XCTestCase {
         XCTAssertTrue(facts.contains("resting heart rate up"), facts)
         XCTAssertTrue(facts.contains("Recommendation: Keep it easy today"), facts)
         XCTAssertTrue(facts.contains("Yesterday: Running of 10"), facts)
+
+        // Nothing from the watch yet today: no verdict, rather than "well recovered" from no bad news.
+        let waiting = Coach.dailyFacts(activities: [run], days: before, format: Format(units: "metric"), now: now)
+        XCTAssertTrue(waiting.contains("Recovery verdict: unknown"), waiting)
+        XCTAssertEqual(Coach.dailyAssessment(waiting)?.verdict, "Waiting for last night")
     }
 }
 

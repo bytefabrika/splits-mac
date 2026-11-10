@@ -5,11 +5,20 @@ import SwiftUI
 @main
 struct SplitsApp: App {
     let container: ModelContainer
-    /// Today's live numbers for the menu bar.
-    @State private var live = LiveToday()
+    /// Today's live numbers for the menu bar and the widgets.
+    @State private var live: LiveToday
+    @State private var sync: Sync
+    /// Syncs in the background, writes the morning briefing and notification, and feeds the widgets.
+    @State private var mornings: Mornings
 
     init() {
-        container = try! ModelContainer(for: Activity.self, Day.self)
+        let container = try! ModelContainer(for: Activity.self, Day.self)
+        self.container = container
+        let live = LiveToday()
+        let sync = Sync(context: container.mainContext)
+        _live = State(initialValue: live)
+        _sync = State(initialValue: sync)
+        _mornings = State(initialValue: Mornings(sync: sync, live: live, context: container.mainContext))
         // The heatmap's route files, from before the Explorer replaced it.
         if let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
             try? FileManager.default.removeItem(at: support.appendingPathComponent("Routes", isDirectory: true))
@@ -29,6 +38,24 @@ struct SplitsApp: App {
         if CommandLine.arguments.contains("--progress-test") { DebugSync.progress(container: container) }
         // `Splits --daily-test` prints this morning's facts and the briefing written from them. Saves nothing.
         if CommandLine.arguments.contains("--daily-test") { DebugSync.daily(container: container) }
+        // `Splits --widget-test` prints the snapshot the widgets read.
+        if CommandLine.arguments.contains("--widget-test") {
+            if let s = WidgetSnapshot.load() {
+                print("updated \(s.updated), battery \(s.bodyBattery ?? -1) (curve \(s.batteryCurve.count)), sleep \(s.sleepSeconds ?? -1), hrv \(s.hrv ?? -1), steps \(s.steps ?? -1)")
+                print("week \(s.week.map { Int($0.metres) }), runs \(s.weekActivities)")
+                print("briefing: \(s.briefingHeadline ?? "–") | \(s.verdict ?? "–") | \(s.plan ?? "–")")
+            } else { print("no snapshot") }
+            let context = container.mainContext
+            let key = GarminDate.string(Date())
+            do {
+                let found = try context.fetch(FetchDescriptor<Day>(predicate: #Predicate { $0.date == key }))
+                print("fetch \(key): \(found.count) days, sleep \(found.first?.sleepSeconds ?? -1), bb \(found.first?.bodyBatteryLatest ?? -1)")
+            } catch { print("fetch failed: \(error)") }
+            let all = (try? context.fetch(FetchDescriptor<Day>(sortBy: [SortDescriptor(\.date, order: .reverse)]))) ?? []
+            print("newest days: \(all.prefix(3).map { "\($0.date) sleep \($0.sleepSeconds ?? -1)" })")
+            print("defaults: \(UserDefaults.standard.string(forKey: DailyBriefing.dateKey) ?? "–") notified \(UserDefaults.standard.string(forKey: DailyBriefing.notifiedKey) ?? "–")")
+            exit(0)
+        }
         // `Splits --card-test < activity.zip > card.png`: the share card for the newest activity, with that file's route.
         if CommandLine.arguments.contains("--card-test") { DebugSync.card(container: container) }
         #endif
@@ -36,7 +63,7 @@ struct SplitsApp: App {
 
     var body: some Scene {
         WindowGroup(id: "main") {
-            ContentView()
+            ContentView(sync: sync)
         }
         .modelContainer(container)
         .defaultSize(width: 1100, height: 720)
@@ -175,6 +202,14 @@ enum DebugSync {
         print("Streaks: \(s.currentDays) days now, longest \(s.longestDays) (ended \(s.longestDaysEnd.map { GarminDate.string($0) } ?? "–")); \(s.currentWeeks) weeks with 3+, longest \(s.longestWeeks); this week \(s.thisWeek), best week \(s.bestWeek)")
         let runs = Array(Records.candidates(all).prefix(3))
         Task {
+            let stored = await RecordStore.shared.all()
+            let byID = Dictionary(uniqueKeysWithValues: all.map { ($0.garminId, $0.start) })
+            let efforts = stored.flatMap { id, bests in bests.compactMap { label, seconds in byID[id].map { (id, $0, label, seconds) } } }
+            let predictor = RacePredictor(efforts: efforts)
+            print("Records looked at: \(stored.count). Predictions (last \(predictor.months) months):")
+            for p in predictor.predictions {
+                print("  \(p.label): \(Format.duration(p.seconds)) from \(p.source.label) \(Format.duration(p.source.seconds)) on \(GarminDate.string(p.source.date))")
+            }
             for r in runs {
                 let started = Date()
                 do {

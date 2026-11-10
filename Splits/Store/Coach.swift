@@ -130,6 +130,19 @@ enum Coach {
 
     // MARK: Daily briefing
 
+    /// The verdict worked out in `dailyFacts`, and the plan in the user's own words (the facts speak about them
+    /// in the third person, for the model), for the notification and the widget.
+    static func dailyAssessment(_ facts: String) -> (verdict: String, plan: String)? {
+        guard let line = facts.split(separator: "\n").first(where: { $0.hasPrefix("Recovery verdict: ") }) else { return nil }
+        let verdict = line.dropFirst("Recovery verdict: ".count).prefix { $0 != "." }
+        switch verdict {
+        case "well recovered": return ("Well recovered", "Room for a harder session today.")
+        case "partly recovered": return ("Partly recovered", "Keep it easy today: an easy run, or rest if you feel flat.")
+        case let v where v.hasPrefix("unknown"): return ("Waiting for last night", "Your briefing comes once your watch has synced last night.")
+        default: return ("Not well recovered", "Rest day today, or something very light like a walk.")
+        }
+    }
+
     static let dailyInstructions = """
     You are a witty, upbeat running buddy writing someone's morning briefing from their Garmin data. Funny like a \
     friend, accurate like a coach.
@@ -230,7 +243,11 @@ enum Coach {
         }
 
         let verdict: String, plan: String
+        let lastNightIn = todayDay?.sleepSeconds != nil || todayDay?.hrvLastNight != nil
         switch tired.count {
+        case _ where !lastNightIn:
+            verdict = "unknown, last night's data hasn't synced from their watch yet"
+            plan = "No call on recovery yet; go by feel until the watch syncs."
         case 0:
             verdict = "well recovered"
             plan = "There's room for a harder session today (intervals, tempo or a long run) if they want one."

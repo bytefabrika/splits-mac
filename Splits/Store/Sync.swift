@@ -67,6 +67,7 @@ final class Sync {
             lastSync = Date()
             defaults.set(lastSync, forKey: "lastSync")
             state = .idle
+            NotificationCenter.default.post(name: .splitsDataChanged, object: nil)
         } catch is CancellationError {
             state = .idle
         } catch {

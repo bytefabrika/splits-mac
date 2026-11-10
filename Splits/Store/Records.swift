@@ -223,3 +223,55 @@ struct Streaks {
         }
     }
 }
+
+// MARK: Race predictions
+
+/// Race times from your best recent efforts, with Riegel's formula: T₂ = T₁ × (D₂ / D₁)^1.06.
+/// Efforts inside training runs are rarely all-out, so each race takes the fastest prediction from any of them.
+struct RacePredictor {
+    struct Source {
+        let label: String
+        let metres: Double
+        let seconds: Double
+        let date: Date
+        let activity: Int64
+    }
+
+    struct Prediction: Identifiable {
+        let label: String
+        let metres: Double
+        let seconds: Double
+        let source: Source
+        var id: String { label }
+    }
+
+    static let exponent = 1.06
+    static let targets: [(label: String, metres: Double)] = [("5 km", 5000), ("10 km", 10_000), ("Half", 21_097.5), ("Marathon", 42_195)]
+
+    let predictions: [Prediction]
+    /// How far back the efforts go: 4 months, or a year when there's nothing more recent.
+    let months: Int
+
+    init(efforts: [(activity: Int64, date: Date, label: String, seconds: Double)], now: Date = Date()) {
+        let distances = Dictionary(uniqueKeysWithValues: Records.distances.map { ($0.label, $0.metres) })
+        func sources(since months: Int) -> [Source] {
+            let cutoff = Calendar.current.date(byAdding: .month, value: -months, to: now)!
+            // 1 km is too short to say much about a 10 km or longer.
+            return efforts.compactMap { e in
+                guard e.date >= cutoff, let m = distances[e.label], m >= 5000 else { return nil }
+                return Source(label: e.label, metres: m, seconds: e.seconds, date: e.date, activity: e.activity)
+            }
+        }
+        var list = sources(since: 4)
+        var months = 4
+        if list.isEmpty { list = sources(since: 12); months = 12 }
+        self.months = months
+        predictions = Self.targets.compactMap { target in
+            // From longer efforts it scales down well; from much shorter ones the marathon gets optimistic,
+            // so a source has to be at least a quarter of the race.
+            let usable = list.filter { $0.metres >= target.metres / 4 }
+            let best = usable.map { s in (s, s.seconds * pow(target.metres / s.metres, Self.exponent)) }.min { $0.1 < $1.1 }
+            return best.map { Prediction(label: target.label, metres: target.metres, seconds: $0.1, source: $0.0) }
+        }
+    }
+}
