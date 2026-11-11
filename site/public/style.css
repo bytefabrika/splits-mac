@@ -50,6 +50,11 @@ h1, h2, h3 { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 19px; color: var(--text); }
 .brand:hover { text-decoration: none; }
 .brand img { border-radius: 22.5%; }
+/* The logo and a small "by Bytefabrika" beside it: two links, side by side rather than nested. */
+.brand-line { display: flex; align-items: center; gap: 8px; }
+/* Sits on the same line as "Splits": the smaller text needs a nudge down to share its baseline. */
+.by { font-size: 13px; color: var(--muted); padding-top: 4px; }
+.by:hover { color: var(--text); text-decoration: none; }
 .nav-links { display: flex; align-items: center; gap: 22px; font-size: 15px; }
 .nav-links a:not(.button) { color: var(--muted); }
 .nav-links a:not(.button):hover { color: var(--text); text-decoration: none; }

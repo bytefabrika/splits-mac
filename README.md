@@ -1,5 +1,7 @@
 # Splits
 
+by [Bytefabrika](https://bytefabrika.io)
+
 Your watch's data, on your Mac. Activities, sleep, HRV, energy and more, in a fast native app. Works with Garmin Connect.
 
 **[splits.bytefabrika.io](https://splits.bytefabrika.io)** · [Download](https://github.com/bytefabrika/splits-mac/releases/latest/download/Splits.zip)
