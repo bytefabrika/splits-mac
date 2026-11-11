@@ -84,7 +84,7 @@ struct ContentView: View {
                             Label("Sync", systemImage: "arrow.triangle.2.circlepath")
                         }
                         .disabled(sync.isRunning)
-                        .help("Get your latest data")
+                        .help("Get your latest data (⌘R)")
                     }
                 }
             }
@@ -103,6 +103,9 @@ struct ContentView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .splitsKeyRemoved)) { _ in hasKey = false }
+        .onReceive(NotificationCenter.default.publisher(for: .splitsShowPage)) { note in
+            if let page = (note.object as? String).flatMap(SidebarItem.init(rawValue:)) { section = page }
+        }
     }
 }
 
@@ -133,8 +136,38 @@ struct SyncStatus: View {
     }
 }
 
+/// The menu bar's commands: every toolbar action and page is there too, with a shortcut.
+struct SplitsCommands: Commands {
+    let sync: Sync
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some Commands {
+        CommandGroup(after: .newItem) {
+            Button("Sync Now") { Task { await sync.run() } }
+                .keyboardShortcut("r")
+                .disabled(sync.isRunning)
+        }
+        CommandMenu("Go") {
+            ForEach(Array(SidebarItem.allCases.enumerated()), id: \.element) { i, item in
+                Button(item.rawValue) { show(item) }
+                    .keyboardShortcut(KeyEquivalent(Character("\(i + 1)")), modifiers: .command)
+            }
+        }
+    }
+
+    private func show(_ item: SidebarItem) {
+        // The page switches in the open window; with none open, one opens first.
+        if !NSApp.windows.contains(where: { $0.isVisible && ($0.identifier?.rawValue.hasPrefix("main") ?? false) }) {
+            openWindow(id: "main")
+        }
+        DispatchQueue.main.async { NotificationCenter.default.post(name: .splitsShowPage, object: item.rawValue) }
+    }
+}
+
 extension Notification.Name {
     static let splitsKeyRemoved = Notification.Name("splitsKeyRemoved")
+    /// A menu command picked a page.
+    static let splitsShowPage = Notification.Name("splitsShowPage")
     /// A sync or the menu bar's live refresh finished: the widgets redraw.
     static let splitsDataChanged = Notification.Name("splitsDataChanged")
 }

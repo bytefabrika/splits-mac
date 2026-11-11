@@ -73,6 +73,7 @@ struct SplitsApp: App {
         }
         .modelContainer(container)
         .defaultSize(width: 1100, height: 720)
+        .commands { SplitsCommands(sync: sync) }
 
         MenuBarExtra {
             MenuBarPanel(live: live)

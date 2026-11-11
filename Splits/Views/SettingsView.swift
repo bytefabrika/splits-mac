@@ -1,3 +1,4 @@
+import ServiceManagement
 import SwiftData
 import SwiftUI
 
@@ -7,6 +8,8 @@ struct SettingsView: View {
     @State private var confirmRemove = false
     @State private var message: String?
     @AppStorage(Mornings.notifyKey) private var morningNotification = true
+    @State private var loginStatus = SMAppService.mainApp.status
+    @State private var loginError: String?
 
     var body: some View {
         Form {
@@ -25,9 +28,18 @@ struct SettingsView: View {
                 if let message { Text(message).font(.caption).foregroundStyle(.secondary) }
             }
 
-            Section("Morning briefing") {
-                Toggle("Send the briefing as a notification", isOn: $morningNotification)
-                Text("Once last night's sleep has synced, Splits writes the day's briefing on this Mac and sends its headline. Splits needs to be running, in the menu bar is enough.")
+            Section("In the background") {
+                Toggle("Open Splits at login", isOn: Binding(get: { loginStatus == .enabled || loginStatus == .requiresApproval },
+                                                             set: setOpenAtLogin))
+                if loginStatus == .requiresApproval {
+                    HStack {
+                        Text("Approve Splits in Login Items to finish.").font(.caption).foregroundStyle(.secondary)
+                        Button("Open Login Items") { SMAppService.openSystemSettingsLoginItems() }.controlSize(.small)
+                    }
+                }
+                if let loginError { Text(loginError).font(.caption).foregroundStyle(.orange) }
+                Toggle("Send the morning briefing as a notification", isOn: $morningNotification)
+                Text("Once last night's sleep has synced, Splits writes the day's briefing on this Mac and sends its headline. The briefing, the widgets and the menu bar stay up to date while Splits is running, even with its window closed.")
                     .font(.caption).foregroundStyle(.secondary)
             }
 
@@ -44,6 +56,9 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .contentMargins(.top, 8, for: .scrollContent)
+        .onAppear { loginStatus = SMAppService.mainApp.status }
         .frame(width: 480, height: 680)  // tall enough that "Remove Key and Data…" isn't cut off
         .confirmationDialog("Remove your key and everything Splits downloaded?", isPresented: $confirmRemove) {
             Button("Remove", role: .destructive) {
@@ -58,5 +73,15 @@ struct SettingsView: View {
                 NotificationCenter.default.post(name: .splitsKeyRemoved, object: nil)
             }
         }
+    }
+
+    private func setOpenAtLogin(_ on: Bool) {
+        loginError = nil
+        do {
+            if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
+        } catch {
+            loginError = "Couldn't change it: \(error.localizedDescription)"
+        }
+        loginStatus = SMAppService.mainApp.status
     }
 }
