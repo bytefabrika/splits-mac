@@ -43,6 +43,16 @@ struct SplitsApp: App {
         if CommandLine.arguments.contains("--daily-test") { DebugSync.daily(container: container) }
         // `Splits --health-test [--no-sync] [--write]` syncs, then prints the Sleep and HRV numbers and facts.
         if CommandLine.arguments.contains("--health-test") { DebugSync.health(container: container) }
+        // `Splits --list-test`: outdoor runs over 5 km with their country, to pick one for screenshots.
+        if CommandLine.arguments.contains("--list-test") {
+            let runs = ((try? container.mainContext.fetch(FetchDescriptor<Activity>(sortBy: [SortDescriptor(\.start, order: .reverse)]))) ?? [])
+                .filter { $0.sport == .run && $0.distance > 5000 && Sport.hasRoute($0) }
+            for a in runs.prefix(400) {
+                let country = a.startLatitude.flatMap { lat in a.startLongitude.flatMap { Atlas.shared.country(lat: lat, lon: $0)?.iso } } ?? "-"
+                print(a.garminId, country, String(format: "%.1f km", a.distance / 1000), a.start.formatted(.dateTime.year().month().day()), a.name)
+            }
+            exit(0)
+        }
         // `Splits --widget-test` prints the snapshot the widgets read.
         if CommandLine.arguments.contains("--widget-test") {
             if let s = WidgetSnapshot.load() {

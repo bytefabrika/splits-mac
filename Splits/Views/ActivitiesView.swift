@@ -81,7 +81,11 @@ struct ActivitiesView: View {
         .onChange(of: search) { refilter() }
         #if DEBUG
         // `-openNewest YES`: opens the newest activity, for screenshots.
-        .onAppear { if UserDefaults.standard.bool(forKey: "openNewest"), let first = activities.first { path = [first.garminId] } }
+        .onAppear {
+            if UserDefaults.standard.bool(forKey: "openNewest"), let first = activities.first { path = [first.garminId] }
+            // `-openActivity 1234567`: that activity, for screenshots.
+            if let id = Int64(UserDefaults.standard.string(forKey: "openActivity") ?? "") { path = [id] }
+        }
         #endif
         .onChange(of: sport) { refilter() }
         .onChange(of: sortOrder) { refilter() }
