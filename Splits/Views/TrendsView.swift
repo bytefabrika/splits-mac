@@ -53,23 +53,7 @@ struct TrendsView: View {
                     }
                     weeklyLoad(activities)
                     aerobicForm(since: since)
-                    sleepStages(days)
-                    ViewThatFits(in: .horizontal) {
-                        HStack(alignment: .top, spacing: 20) {
-                            hrv(days)
-                            restingHR(days)
-                        }
-                        VStack(alignment: .leading, spacing: 28) {
-                            hrv(days)
-                            restingHR(days)
-                        }
-                    }
                     records(activities)
-
-                    if allDays.first.map({ $0.day > since }) == true {
-                        Text("Sleep, HRV and heart rate go back a year from the first sync.")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
                 }
                 .padding(24)
                 .frame(maxWidth: 1240)
@@ -267,64 +251,6 @@ struct TrendsView: View {
     }
 
     // MARK: Wellness
-
-    private func sleepStages(_ days: [Day]) -> some View {
-        let nights = days.filter { $0.sleepSeconds != nil }
-        let stages: [(String, Color, KeyPath<Day, Int?>)] = [
-            ("Deep", .indigo, \.deepSeconds), ("Light", .blue, \.lightSeconds), ("REM", .purple, \.remSeconds), ("Awake", .pink, \.awakeSeconds),
-        ]
-        return ChartCard(title: "Sleep stages", subtitle: average(nights.compactMap(\.sleepSeconds)).map { "Average \(Format.hoursMinutes($0)) a night" } ?? "") {
-            Chart {
-                ForEach(nights, id: \.date) { night in
-                    ForEach(stages, id: \.0) { name, _, path in
-                        BarMark(x: .value("Night", night.day, unit: .day), y: .value("Hours", Double(night[keyPath: path] ?? 0) / 3600))
-                            .foregroundStyle(by: .value("Stage", name))
-                    }
-                }
-                if let avg = average(nights.compactMap(\.sleepSeconds)) {
-                    RuleMark(y: .value("Average", Double(avg) / 3600))
-                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .chartForegroundStyleScale(domain: stages.map(\.0), range: stages.map(\.1))
-            .chartYAxisLabel("hours")
-        }
-    }
-
-    private func hrv(_ days: [Day]) -> some View {
-        ChartCard(title: "Overnight HRV", subtitle: "Shaded: your balanced range") {
-            Chart {
-                ForEach(days.filter { $0.hrvBalancedLow != nil && $0.hrvBalancedHigh != nil }, id: \.date) { d in
-                    AreaMark(x: .value("Day", d.day), yStart: .value("Low", d.hrvBalancedLow!), yEnd: .value("High", d.hrvBalancedHigh!))
-                        .foregroundStyle(.teal.opacity(0.15))
-                }
-                ForEach(days.filter { $0.hrvLastNight != nil }, id: \.date) { d in
-                    LineMark(x: .value("Day", d.day), y: .value("HRV", d.hrvLastNight!), series: .value("s", "night"))
-                        .foregroundStyle(.teal.opacity(0.45))
-                }
-                ForEach(days.filter { $0.hrvWeekly != nil }, id: \.date) { d in
-                    LineMark(x: .value("Day", d.day), y: .value("HRV", d.hrvWeekly!), series: .value("s", "week"))
-                        .foregroundStyle(.teal)
-                        .lineStyle(StrokeStyle(lineWidth: 2.5))
-                }
-            }
-            .chartYScale(domain: .automatic(includesZero: false))
-            .chartYAxisLabel("ms")
-        }
-    }
-
-    private func restingHR(_ days: [Day]) -> some View {
-        ChartCard(title: "Resting heart rate", subtitle: average(days.compactMap(\.restingHR)).map { "Average \($0) bpm" } ?? "") {
-            Chart(days.filter { $0.restingHR != nil }, id: \.date) { d in
-                LineMark(x: .value("Day", d.day), y: .value("bpm", d.restingHR!))
-                    .interpolationMethod(.catmullRom)
-                    .foregroundStyle(.red)
-            }
-            .chartYScale(domain: .automatic(includesZero: false))
-            .chartYAxisLabel("bpm")
-        }
-    }
 
     // MARK: Aerobic form
 

@@ -64,6 +64,7 @@ final class Sync {
             }
             try await syncActivities()
             try await syncDays()
+            try await backfillSleepDetails()
             lastSync = Date()
             defaults.set(lastSync, forKey: "lastSync")
             state = .idle
@@ -135,6 +136,8 @@ final class Sync {
             firstNeeded = calendar.date(byAdding: .day, value: -Self.overlapDays, to: last)!
         } else {
             firstNeeded = calendar.date(byAdding: .day, value: -(Self.wellnessDays - 1), to: end)!
+            // A first sync reads every sleep field already.
+            defaults.set(true, forKey: "sleepDetailsBackfilled")
         }
 
         // Newest chunk first, so "Today" fills in before the rest of the year.
@@ -171,21 +174,7 @@ final class Sync {
             day.respiration = s.respiration?.avgValue
         }
 
-        let sleep: [SleepDTO] = try await client.get(Endpoint.sleep(from: from, to: to).0, query: Endpoint.sleep(from: from, to: to).1)
-        for s in sleep where (s.sleepTimeSeconds ?? 0) > 0 {
-            guard let date = s.calendarDate else { continue }
-            found.nights += 1
-            let day = self.day(date)
-            day.sleepSeconds = s.sleepTimeSeconds
-            day.deepSeconds = s.deepSleepSeconds
-            day.lightSeconds = s.lightSleepSeconds
-            day.remSeconds = s.remSleepSeconds
-            day.awakeSeconds = s.awakeSleepSeconds
-            day.sleepScore = s.sleepScores?.overall?.value
-            day.sleepQuality = s.sleepScores?.overall?.qualifierKey
-            day.sleepStart = s.sleepStartTimestampLocal.map(GarminDate.localMillis)
-            day.sleepEnd = s.sleepEndTimestampLocal.map(GarminDate.localMillis)
-        }
+        try await syncSleep(from: from, to: to)
 
         let hrv: HRVRangeDTO = try await client.get(Endpoint.hrv(from: from, to: to).0)
         for h in hrv.hrvSummaries {
@@ -205,6 +194,48 @@ final class Sync {
             day.steps = s.totalSteps
             day.stepGoal = s.stepGoal
         }
+    }
+
+    private func syncSleep(from: String, to: String) async throws {
+        let sleep: [SleepDTO] = try await client.get(Endpoint.sleep(from: from, to: to).0, query: Endpoint.sleep(from: from, to: to).1)
+        for s in sleep where (s.sleepTimeSeconds ?? 0) > 0 {
+            guard let date = s.calendarDate else { continue }
+            found.nights += 1
+            let day = self.day(date)
+            day.sleepSeconds = s.sleepTimeSeconds
+            day.deepSeconds = s.deepSleepSeconds
+            day.lightSeconds = s.lightSleepSeconds
+            day.remSeconds = s.remSleepSeconds
+            day.awakeSeconds = s.awakeSleepSeconds
+            day.sleepScore = s.sleepScores?.overall?.value
+            day.sleepQuality = s.sleepScores?.overall?.qualifierKey
+            day.sleepStart = s.sleepStartTimestampLocal.map(GarminDate.localMillis)
+            day.sleepEnd = s.sleepEndTimestampLocal.map(GarminDate.localMillis)
+            day.sleepNeedMinutes = s.sleepNeed?.actual
+            day.sleepNeedBaseline = s.sleepNeed?.baseline
+            day.sleepRespiration = s.averageRespirationValue
+            day.sleepRespirationLow = s.lowestRespirationValue
+            day.sleepRespirationHigh = s.highestRespirationValue
+            day.sleepStress = s.avgSleepStress
+            day.awakeCount = s.awakeCount
+            day.sleepFeedback = s.sleepScoreFeedback
+        }
+    }
+
+    /// Nights stored before sleep need, breathing and sleep stress were kept: read the year's sleep once more.
+    private func backfillSleepDetails() async throws {
+        guard !defaults.bool(forKey: "sleepDetailsBackfilled") else { return }
+        let calendar = Calendar.current
+        let end = calendar.startOfDay(for: today())
+        var chunkEnd = end
+        for chunk in 0..<(Self.wellnessDays / Self.chunkDays + 1) {
+            let chunkStart = calendar.date(byAdding: .day, value: -(Self.chunkDays - 1), to: chunkEnd)!
+            state = .running("Loading sleep details… \(chunk * 100 / (Self.wellnessDays / Self.chunkDays + 1))%")
+            try await syncSleep(from: GarminDate.string(chunkStart), to: GarminDate.string(chunkEnd))
+            try context.save()
+            chunkEnd = calendar.date(byAdding: .day, value: -1, to: chunkStart)!
+        }
+        defaults.set(true, forKey: "sleepDetailsBackfilled")
     }
 
     private var dayCache: [String: Day] = [:]

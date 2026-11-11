@@ -26,6 +26,8 @@ struct SplitsApp: App {
         #if DEBUG
         // `SPLITS_KEY=… Splits --sync-test` runs a full sync into a throwaway store and prints what came back.
         if CommandLine.arguments.contains("--sync-test") { DebugSync.run() }
+        // `Splits --raw-test <path> [name=value…]` prints Garmin's raw JSON for one endpoint (key from the keychain).
+        if CommandLine.arguments.contains("--raw-test") { DebugSync.raw() }
         // `Splits --fit-test < activity.zip` decodes a Garmin download (ZIP or FIT) from stdin.
         if CommandLine.arguments.contains("--fit-test") { DebugSync.fit() }
         // `Splits --coach-test` writes a take on the newest activity in the real store and prints it. Saves nothing.
@@ -38,6 +40,8 @@ struct SplitsApp: App {
         if CommandLine.arguments.contains("--progress-test") { DebugSync.progress(container: container) }
         // `Splits --daily-test` prints this morning's facts and the briefing written from them. Saves nothing.
         if CommandLine.arguments.contains("--daily-test") { DebugSync.daily(container: container) }
+        // `Splits --health-test [--no-sync] [--write]` syncs, then prints the Sleep and HRV numbers and facts.
+        if CommandLine.arguments.contains("--health-test") { DebugSync.health(container: container) }
         // `Splits --widget-test` prints the snapshot the widgets read.
         if CommandLine.arguments.contains("--widget-test") {
             if let s = WidgetSnapshot.load() {
@@ -247,6 +251,50 @@ enum DebugSync {
     }
 
     @MainActor
+    static func health(container: ModelContainer) {
+        Task { @MainActor in
+            if !CommandLine.arguments.contains("--no-sync") {
+                let sync = Sync(context: container.mainContext)
+                await sync.run()
+                print("sync: \(sync.state)")
+            }
+            let context = container.mainContext
+            let activities = (try? context.fetch(FetchDescriptor<Activity>(sortBy: [SortDescriptor(\.start)]))) ?? []
+            let days = (try? context.fetch(FetchDescriptor<Day>(sortBy: [SortDescriptor(\.date)]))) ?? []
+            let mornings = HRVAnalysis.mornings(days)
+            let series = HRVAnalysis.series(mornings)
+            print("HRV mornings \(mornings.count), points \(series.count), banded \(series.filter { $0.low != nil }.count)")
+            if let p = series.last {
+                print(String(format: "latest 7d %.0f ms, range %.0f–%.0f, cv %.1f%% (usual %.1f%%), level %@",
+                             p.meanMs, p.lowMs ?? 0, p.highMs ?? 0, p.cv, p.usualCV ?? 0, HRVAnalysis.level(p)?.rawValue ?? "-"))
+            }
+            for d in HRVAnalysis.drivers(days: days, activities: activities) {
+                print(String(format: "  %@ / %@: %+.1f%% (n=%d)", d.group, d.label, d.percent, d.count))
+            }
+            print("pairs \(HRVAnalysis.pairs(days).count), load ratio \(HRVAnalysis.loadRatio(activities).map { String(format: "%.2f", $0) } ?? "-")")
+            let nights = SleepAnalysis.nights(days)
+            print("nights \(nights.count), with need \(nights.filter { $0.need != nil }.count), debt \(SleepAnalysis.debt(nights).map { Int($0 / 60) } ?? -1) min")
+            if let r = SleepAnalysis.regularity(Array(nights.suffix(30))) {
+                print("bed \(SleepAnalysis.clock(r.bedtime)) ±\(Int(r.bedtimeSpread)), wake \(SleepAnalysis.clock(r.wake)) ±\(Int(r.wakeSpread))")
+            }
+            if let c = SleepAnalysis.bodyClock(Array(nights.suffix(60))) {
+                print("midsleep work \(SleepAnalysis.clock(c.workdays)) free \(SleepAnalysis.clock(c.freeDays)) jetlag \(Int(c.socialJetlag * 60)) min, MSFsc \(SleepAnalysis.clock(c.chronotype)) \(c.label)")
+            }
+            print("stages 30n \(SleepAnalysis.stageShares(Array(nights.suffix(30))).mapValues { Int($0) })")
+            for (name, facts) in [("HRV", Coach.hrvFacts(days: days, activities: activities)), ("Sleep", Coach.sleepFacts(days: days))] {
+                print("==== \(name) facts\n\(facts)")
+                if CommandLine.arguments.contains("--write") {
+                    var last = ""
+                    do { try await Coach.write(facts: facts, instructions: Coach.healthInstructions, temperature: 0.4) { last = $0 } } catch { last = "\(error)" }
+                    print("---- take\n\(last)")
+                }
+            }
+            exit(0)
+        }
+        RunLoop.main.run()
+    }
+
+    @MainActor
     static func trends(container: ModelContainer) {
         let all = (try? ModelContext(container).fetch(FetchDescriptor<Activity>())) ?? []
         let year = all.filter { $0.start > Date().addingTimeInterval(-365 * 86_400) }
@@ -290,6 +338,27 @@ enum DebugSync {
                   let png = ShareCard.png(activity: activity, route: route, format: Format(units: "metric")) else { exit(1) }
             FileHandle.standardOutput.write(png)
             exit(0)
+        }
+    }
+
+    static func raw() {
+        let args = Array(CommandLine.arguments.drop { $0 != "--raw-test" }.dropFirst())
+        guard let path = args.first else { exit(1) }
+        var query: [String: String] = [:]
+        for pair in args.dropFirst() {
+            let parts = pair.split(separator: "=", maxSplits: 1).map(String.init)
+            if parts.count == 2 { query[parts[0]] = parts[1] }
+        }
+        let key = ProcessInfo.processInfo.environment["SPLITS_KEY"] ?? Keychain.readKey()
+        Task {
+            do {
+                let data = try await GarminClient(key: { key }).getData(path, query: query, accept: "application/json")
+                FileHandle.standardOutput.write(data)
+                exit(0)
+            } catch {
+                FileHandle.standardError.write(Data("\(error)\n".utf8))
+                exit(1)
+            }
         }
     }
 

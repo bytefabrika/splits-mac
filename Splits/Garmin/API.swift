@@ -129,7 +129,16 @@ struct SleepDTO: Decodable {
     let sleepEndTimestampLocal: Double?
     let avgHeartRate: Double?
     let averageRespirationValue: Double?
+    let lowestRespirationValue: Double?
+    let highestRespirationValue: Double?
+    let awakeCount: Int?
+    let avgSleepStress: Double?
+    /// "NEGATIVE_LONG_BUT_NOT_ENOUGH_REM" and the like: Garmin's reason for the score.
+    let sleepScoreFeedback: String?
     let sleepScores: Scores?
+    /// Garmin's sleep need for that night in minutes: `baseline` is the usual, `actual` adjusted for training and HRV.
+    struct Need: Decodable { let baseline: Int?; let actual: Int? }
+    let sleepNeed: Need?
 }
 
 struct HRVRangeDTO: Decodable {
@@ -143,6 +152,33 @@ struct HRVRangeDTO: Decodable {
         let status: String?
     }
     let hrvSummaries: [Summary]
+}
+
+/// One night's HRV: the summary plus a reading every 5 minutes while asleep (`/hrv-service/hrv/{date}`).
+struct HRVNightDTO: Decodable {
+    struct Reading: Decodable {
+        let hrvValue: Int?
+        /// "2026-11-08T23:29:59.0", UTC.
+        let readingTimeGMT: String?
+    }
+    let hrvSummary: HRVRangeDTO.Summary?
+    let hrvReadings: [Reading]?
+
+    private static let formatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "UTC")
+        f.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+        return f
+    }()
+
+    var readings: [(Date, Double)] {
+        (hrvReadings ?? []).compactMap { r in
+            guard let value = r.hrvValue, let time = r.readingTimeGMT,
+                  let date = Self.formatter.date(from: String(time.prefix(19))) else { return nil }
+            return (date, Double(value))
+        }
+    }
 }
 
 /// One day's Body Battery through the day: `[[timestamp ms (GMT), level], …]`.
@@ -202,6 +238,8 @@ enum Endpoint {
     static func hrv(from: String, to: String) -> (String, [String: String]) {
         ("/hrv-service/hrv/daily/\(from)/\(to)", [:])
     }
+    /// One night with a reading every 5 minutes.
+    static func hrvNight(_ date: String) -> String { "/hrv-service/hrv/\(date)" }
     static func steps(from: String, to: String) -> (String, [String: String]) {
         ("/usersummary-service/stats/steps/daily/\(from)/\(to)", [:])
     }

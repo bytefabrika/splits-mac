@@ -2,13 +2,16 @@ import SwiftData
 import SwiftUI
 
 enum SidebarItem: String, CaseIterable, Identifiable {
-    case today = "Today", activities = "Activities", trends = "Trends", records = "Records", explorer = "Explorer"
+    case today = "Today", activities = "Activities", trends = "Trends", sleep = "Sleep", hrv = "HRV", records = "Records"
+    case explorer = "Explorer"
     var id: String { rawValue }
     var symbol: String {
         switch self {
         case .today: "sun.max"
         case .activities: "list.bullet.rectangle"
         case .trends: "chart.xyaxis.line"
+        case .sleep: "moon.zzz"
+        case .hrv: "waveform.path.ecg"
         case .records: "trophy"
         case .explorer: "globe.europe.africa"
         }
@@ -66,6 +69,8 @@ struct ContentView: View {
                     case .today: TodayView()
                     case .activities: ActivitiesView()
                     case .trends: TrendsView()
+                    case .sleep: SleepView()
+                    case .hrv: HRVView()
                     case .records: RecordsView()
                     case .explorer: ExplorerView()
                     }

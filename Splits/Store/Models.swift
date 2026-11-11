@@ -122,6 +122,16 @@ final class Day {
     var hrvStatus: String?
     var hrvBalancedLow: Int?
     var hrvBalancedHigh: Int?
+    /// Garmin's sleep need for the night, in minutes (its usual need adjusted for training and HRV).
+    var sleepNeedMinutes: Int?
+    var sleepNeedBaseline: Int?
+    /// Breathing while asleep, breaths a minute (`respiration` is the whole day's average).
+    var sleepRespiration: Double?
+    var sleepRespirationLow: Double?
+    var sleepRespirationHigh: Double?
+    var sleepStress: Double?
+    var awakeCount: Int?
+    var sleepFeedback: String?
 
     init(date: String) { self.date = date }
 
