@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Sparkle: where new versions are listed, and the public half of the key that signs them. -->
+	<key>SUFeedURL</key>
+	<string>https://raw.githubusercontent.com/bytefabrika/splits-mac/main/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>ook4VDiosLQ+sUCKK5q1oWjpSpQZ0l3CIeUEtWu4IC8=</string>
+	<!-- Needed in a sandboxed app. -->
+	<key>SUEnableInstallerLauncherService</key>
+	<true/>
+	<!-- Nothing about the Mac is sent with an update check. -->
+	<key>SUEnableSystemProfiling</key>
+	<false/>
+</dict>
+</plist>

@@ -12,6 +12,7 @@ struct SplitsApp: App {
     @State private var mornings: Mornings
 
     init() {
+        Updater.shared.start()
         let container = try! ModelContainer(for: Activity.self, Day.self)
         self.container = container
         let live = LiveToday()

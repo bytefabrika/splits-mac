@@ -20,7 +20,7 @@ Splits uses the Garmin Connect Personal API with a key you create in your own ac
 
 ## Your privacy
 
-Bytefabrika has no server for Splits and receives none of your data: no account, no analytics, no tracking. What Splits downloads is stored on this Mac only, and the AI runs on this Mac. Settings › General › Remove Key and Data deletes all of it.
+Bytefabrika has no server for Splits and receives none of your data: no account, no analytics, no tracking. What Splits downloads is stored on this Mac only, and the AI runs on this Mac. Settings › General › Remove Key and Data deletes all of it. To look for a new version, Splits reads a file from GitHub about once a day; nothing about you or your Mac is sent with it, and it can be turned off in Settings.
 
 ## No warranty
 

@@ -10,6 +10,7 @@ struct SettingsView: View {
     @AppStorage(Mornings.notifyKey) private var morningNotification = true
     @State private var loginStatus = SMAppService.mainApp.status
     @State private var loginError: String?
+    @ObservedObject private var updater = Updater.shared
 
     var body: some View {
         Form {
@@ -45,6 +46,11 @@ struct SettingsView: View {
 
             Section("About") {
                 LabeledContent("Version", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "–")
+                Toggle("Check for updates automatically", isOn: Binding(get: { updater.checksAutomatically },
+                                                                         set: { updater.checksAutomatically = $0 }))
+                    .disabled(!Updater.isAvailable)
+                Button("Check for Updates…") { updater.check() }
+                    .disabled(!updater.canCheck || !Updater.isAvailable)
                 Text("An independent app by Bytefabrika. Works with Garmin Connect; not affiliated with or endorsed by Garmin. Not a medical device. See Legal for the full notices.")
                     .font(.caption).foregroundStyle(.secondary)
             }

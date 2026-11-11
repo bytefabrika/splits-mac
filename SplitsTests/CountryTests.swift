@@ -44,9 +44,9 @@ final class CityTests: XCTestCase {
 
     func testCities() {
         XCTAssertEqual(cities.city(lat: 52.0908, lon: 5.1222, iso: "NL")?.name, "Utrecht")
-        XCTAssertEqual(cities.city(lat: 52.0817, lon: 5.0361, iso: "NL")?.name, "Utrecht")      // De Meern, inside Utrecht's reach
+        XCTAssertEqual(cities.city(lat: 52.0817, lon: 5.0361, iso: "NL")?.name, "Utrecht")      // De Meern's centre, inside Utrecht's reach
         XCTAssertEqual(cities.city(lat: 52.3812, lon: 4.6368, iso: "NL")?.name, "Haarlem")      // not swallowed by Amsterdam
-        XCTAssertEqual(cities.city(lat: 41.0227, lon: 29.0137, iso: "TR")?.name, "Istanbul")    // Kadıköy
+        XCTAssertEqual(cities.city(lat: 41.0227, lon: 29.0137, iso: "TR")?.name, "Istanbul")    // Üsküdar's centre, on the Asian side
         XCTAssertNotEqual(cities.city(lat: 45.43, lon: 13.53, iso: "HR")?.iso, "SI")            // Istria stays in Croatia
         XCTAssertNil(cities.city(lat: 46.0, lon: 7.85, iso: "CH"))                             // high in the Alps
     }
@@ -55,7 +55,7 @@ final class CityTests: XCTestCase {
 final class MegacityTests: XCTestCase {
     func testDistrictsCountAsTheCity() {
         let cities = CityAtlas()
-        XCTAssertEqual(cities.city(lat: 41.027, lon: 28.6773, iso: "TR")?.name, "Istanbul")  // Esenyurt
+        XCTAssertEqual(cities.city(lat: 41.027, lon: 28.6773, iso: "TR")?.name, "Istanbul")  // Esenyurt's centre
         XCTAssertEqual(cities.city(lat: 52.1561, lon: 5.3878, iso: "NL")?.name, "Amersfoort")  // not Utrecht
     }
 }

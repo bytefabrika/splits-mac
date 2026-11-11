@@ -142,6 +142,7 @@ struct SplitsCommands: Commands {
     @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
+        CommandGroup(after: .appInfo) { CheckForUpdatesButton() }
         CommandGroup(after: .newItem) {
             Button("Sync Now") { Task { await sync.run() } }
                 .keyboardShortcut("r")

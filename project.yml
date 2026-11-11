@@ -13,6 +13,11 @@ settings:
     CURRENT_PROJECT_VERSION: "1"
     ENABLE_HARDENED_RUNTIME: YES
     DEAD_CODE_STRIPPING: YES
+packages:
+  # Updates for copies downloaded from GitHub. Pinned: a new Sparkle is a deliberate upgrade.
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    exactVersion: 2.10.1
 targets:
   Splits:
     type: application
@@ -20,11 +25,14 @@ targets:
     sources: [Splits, Shared]
     dependencies:
       - target: SplitsWidget
+      - package: Sparkle
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.bytefabrika.splits
         PRODUCT_NAME: Splits
         GENERATE_INFOPLIST_FILE: YES
+        # Sparkle's keys (feed, public key, sandbox installer); merged with the generated plist.
+        INFOPLIST_FILE: Splits/Info.plist
         INFOPLIST_KEY_CFBundleDisplayName: Splits
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.healthcare-fitness
         INFOPLIST_KEY_NSHumanReadableCopyright: "© 2026 Bytefabrika"
