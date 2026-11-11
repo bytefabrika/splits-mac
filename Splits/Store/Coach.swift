@@ -87,7 +87,7 @@ enum Coach {
         if let power = activity.averagePower { lines.append("Average power: \(Int(power)) W") }
         if paceLike, let cadence = activity.cadence { lines.append("Cadence: \(Int(cadence)) spm") }
         if let te = activity.aerobicEffect {
-            lines.append(String(format: "Garmin training effect: aerobic %.1f, anaerobic %.1f (out of 5)", te, activity.anaerobicEffect ?? 0))
+            lines.append(String(format: "Effect on fitness from the watch: aerobic %.1f, anaerobic %.1f (out of 5)", te, activity.anaerobicEffect ?? 0))
         }
         if let load = activity.trainingLoad { lines.append("Training load: \(Int(load))") }
         if let t = activity.minTemperature { lines.append("Temperature: \(Int(t))–\(Int(activity.maxTemperature ?? t)) °C") }
@@ -111,7 +111,7 @@ enum Coach {
             var parts: [String] = []
             if let s = morning.sleepSeconds { parts.append("slept \(Format.hoursMinutes(s))" + (morning.sleepScore.map { " (sleep score \($0))" } ?? "")) }
             if let hrv = morning.hrvLastNight { parts.append("overnight HRV \(hrv) ms" + (morning.hrvStatus.map { ", status \(Format.title($0).lowercased())" } ?? "")) }
-            if let bb = morning.bodyBatteryHigh { parts.append("Body Battery peaked at \(bb)") }
+            if let bb = morning.bodyBatteryHigh { parts.append("energy level (0 to 100) peaked at \(bb)") }
             if let rhr = morning.restingHR { parts.append("resting heart rate \(rhr)") }
             if !parts.isEmpty { lines.append("That day: " + parts.joined(separator: "; ") + ".") }
         }
@@ -213,7 +213,7 @@ enum Coach {
     }
 
     static let dailyInstructions = """
-    You are a witty, upbeat running buddy writing someone's morning briefing from their Garmin data. Funny like a \
+    You are a witty, upbeat running buddy writing someone's morning briefing from their watch data. Funny like a \
     friend, accurate like a coach.
     Format: one short headline line (under 10 words, one emoji) that matches the recovery verdict, then 3 short \
     paragraphs of 1–2 sentences each, under 90 words in total. No lists.
@@ -274,10 +274,10 @@ enum Coach {
             }
             if let high = d.bodyBatteryHigh {
                 let usual = avg(before.compactMap(\.bodyBatteryHigh))
-                var line = "Body Battery charged to \(high) overnight"
+                var line = "Energy level (0 to 100) charged to \(high) overnight"
                 if let usual { line += high >= usual + 8 ? ", higher than usual (\(usual))" : high <= usual - 8 ? ", lower than usual (\(usual))" : ", about usual" }
                 lines.append(line + ".")
-                if let usual, high <= usual - 10 || high < 40 { tired.append("low Body Battery") } else if high >= 75 { fresh.append("Body Battery well charged") }
+                if let usual, high <= usual - 10 || high < 40 { tired.append("low energy level") } else if high >= 75 { fresh.append("energy level well charged") }
             }
         }
 

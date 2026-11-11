@@ -116,7 +116,7 @@ struct TodayView: View {
     }
 
     private var bodyBatteryCard: some View {
-        Card(title: "Body Battery", symbol: "bolt.heart.fill", tint: .blue) {
+        Card(title: "Energy", symbol: "bolt.heart.fill", tint: .blue) {
             if let today, let latest = today.bodyBatteryLatest {
                 HStack(alignment: .firstTextBaseline) {
                     Text("\(latest)").font(.title.bold())
@@ -141,7 +141,7 @@ struct TodayView: View {
                 Text("High \(today.bodyBatteryHigh ?? 0) · low \(today.bodyBatteryLow ?? 0) · +\(today.bodyBatteryCharged ?? 0) charged · −\(today.bodyBatteryDrained ?? 0) drained")
                     .font(.caption).foregroundStyle(.secondary)
             } else {
-                Text("No Body Battery today").foregroundStyle(.secondary)
+                Text("No energy reading today").foregroundStyle(.secondary)
             }
         }
     }
@@ -251,7 +251,7 @@ struct ReportCard: View {
         case daily
 
         var title: String { "Your day" }
-        var subtitle: String { "This morning's briefing, written on your Mac" }
+        var subtitle: String { "Written by on-device AI, can be wrong" }
         var ask: String { "Brief me on today" }
         var waiting: String { "Looking at last night and your training…" }
         var symbol: String { "sun.horizon.fill" }

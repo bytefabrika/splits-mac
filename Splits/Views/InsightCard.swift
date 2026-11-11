@@ -43,7 +43,7 @@ struct InsightCard: View {
                         .font(.headline)
                         .foregroundStyle(LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing))
                     Spacer()
-                    Text("Written on your Mac").font(.caption2).foregroundStyle(.secondary)
+                    Text("Written by on-device AI, can be wrong").font(.caption2).foregroundStyle(.secondary)
                     if !writing && status == .ready && !savedText.isEmpty {
                         Button { Task { await write() } } label: { Image(systemName: "arrow.clockwise") }
                             .buttonStyle(.borderless)

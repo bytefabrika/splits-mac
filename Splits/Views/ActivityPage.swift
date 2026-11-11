@@ -67,7 +67,7 @@ struct ActivityPage: View {
                 } else {
                     HStack(spacing: 10) {
                         ProgressView().controlSize(.small)
-                        Text("Getting the activity file from Garmin…").foregroundStyle(.secondary)
+                        Text("Downloading the activity file…").foregroundStyle(.secondary)
                     }
                     .padding(.vertical, 30)
                 }
@@ -257,7 +257,7 @@ struct StatGroups: View {
         }
 
         var body: [(String, String)] = []
-        if let bb = d?.differenceBodyBattery { body.append(("Body Battery", bb > 0 ? "+\(Int(bb))" : "\(Int(bb))")) }
+        if let bb = d?.differenceBodyBattery { body.append(("Energy", bb > 0 ? "+\(Int(bb))" : "\(Int(bb))")) }
         if let water = d?.waterEstimated, water > 0 { body.append(("Sweat loss", String(format: "%.1f L", water / 1000))) }
         if let start = d?.beginPotentialStamina, let end = d?.endPotentialStamina {
             body.append(("Stamina", "\(Int(start))% → \(Int(end))%"))
@@ -844,13 +844,13 @@ struct EffectCard: View {
     var body: some View {
         if let aerobic = activity.aerobicEffect {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Training effect").font(.headline)
+                Text("Effect on fitness").font(.headline)
                 HStack(spacing: 20) {
                     EffectGauge(label: "Aerobic", value: aerobic, tint: .teal)
                     EffectGauge(label: "Anaerobic", value: activity.anaerobicEffect ?? 0, tint: .purple)
                     VStack(alignment: .leading, spacing: 4) {
                         Text(Self.describe(aerobic)).font(.callout.weight(.semibold))
-                        Text("Garmin's 0–5 scale for how much this session moved your fitness.")
+                        Text("Your watch's 0–5 scale for how much this session moved your fitness.")
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
@@ -960,7 +960,7 @@ struct CoachCard: View {
                         .font(.headline)
                         .foregroundStyle(LinearGradient(colors: [.purple, .pink, .orange], startPoint: .leading, endPoint: .trailing))
                     Spacer()
-                    Text("Written on your Mac by Apple Intelligence").font(.caption2).foregroundStyle(.secondary)
+                    Text("Written by on-device AI, can be wrong").font(.caption2).foregroundStyle(.secondary)
                     if activity.coachNote != nil && !writing && status == .ready {
                         Button { Task { await write() } } label: { Image(systemName: "arrow.clockwise") }
                             .buttonStyle(.borderless)

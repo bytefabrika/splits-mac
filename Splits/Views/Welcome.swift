@@ -47,6 +47,7 @@ struct OnboardingView: View {
     let onSave: (String) -> Void
     @State private var key = ""
     @State private var bounce = 0
+    @State private var showLegal = false
     @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -73,7 +74,7 @@ struct OnboardingView: View {
                     Text("Every run, ride and night of sleep.")
                         .font(.system(size: 38, weight: .heavy, design: .rounded))
                         .multilineTextAlignment(.center)
-                    Text("Your Garmin data, fast and beautiful, right here on your Mac.")
+                    Text("Your watch's data, fast and beautiful, right here on your Mac.")
                         .font(.title3)
                         .foregroundStyle(.secondary)
                 }
@@ -112,11 +113,25 @@ struct OnboardingView: View {
                     HStack(spacing: 8) {
                         PrivacyChip(symbol: "lock.fill", text: "Key stays in your keychain")
                         PrivacyChip(symbol: "person.crop.circle.badge.xmark", text: "No account")
-                        PrivacyChip(symbol: "server.rack", text: "No server: just your Mac and Garmin")
+                        PrivacyChip(symbol: "server.rack", text: "No server in between")
                     }
+                    Text("Works with Garmin Connect; not affiliated with Garmin. Not medical advice. Adding your key means you accept the [legal notices](splits-legal:).")
+                        // The link opens the notices here rather than in a browser.
+                        .environment(\.openURL, OpenURLAction { _ in showLegal = true; return .handled })
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 4)
                 }
             }
             .padding(40)
+            .sheet(isPresented: $showLegal) {
+                VStack(spacing: 0) {
+                    LegalView()
+                    Divider()
+                    HStack { Spacer(); Button("Done") { showLegal = false }.keyboardShortcut(.defaultAction) }.padding(12)
+                }
+                .frame(width: 560, height: 560)
+            }
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 28))
             .shadow(color: .black.opacity(0.15), radius: 30, y: 10)
             .padding(40)

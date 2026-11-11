@@ -147,7 +147,7 @@ final class Sync {
         while chunkEnd >= firstNeeded {
             let chunkStart = max(calendar.date(byAdding: .day, value: -(Self.chunkDays - 1), to: chunkEnd)!, firstNeeded)
             let from = GarminDate.string(chunkStart), to = GarminDate.string(chunkEnd)
-            state = .running("Loading sleep, HRV and Body Battery… \(min(done * 100 / max(totalDays, 1), 99))%")
+            state = .running("Loading sleep, HRV and energy… \(min(done * 100 / max(totalDays, 1), 99))%")
             try await syncDays(from: from, to: to)
             try context.save()
             done += Self.chunkDays

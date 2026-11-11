@@ -5,7 +5,7 @@ import Foundation
 
 extension Coach {
     static let healthInstructions = """
-    You are a friendly, sharp coach explaining someone's Garmin data to them like a smart friend would.
+    You are a friendly, sharp coach explaining someone's watch data to them like a smart friend would.
     Format: one short, playful headline line (under 8 words, one emoji) that puts the verdict in your own words and \
     never sounds the opposite of it, then 3 short \
     paragraphs of 1–2 sentences each, under 100 words in total. No lists.
@@ -136,7 +136,7 @@ extension Coach {
 
         if let need = last.need {
             let diff = last.asleep - need
-            reasons.append("Last night they slept \(hm(last.asleep)), \(abs(diff) < 15 * 60 ? "about what" : diff < 0 ? "\(hm(-diff)) less than" : "\(hm(diff)) more than") Garmin says they needed.")
+            reasons.append("Last night they slept \(hm(last.asleep)), \(abs(diff) < 15 * 60 ? "about what" : diff < 0 ? "\(hm(-diff)) less than" : "\(hm(diff)) more than") their watch says they needed.")
         } else {
             reasons.append("Last night they slept \(hm(last.asleep)).")
         }
@@ -161,7 +161,7 @@ extension Coach {
         let shares = SleepAnalysis.stageShares(recent)
         let low = SleepAnalysis.optimal.filter { o in shares[o.stage].map { $0 < o.low } ?? false }.map(\.stage).filter { $0 != "Light" }
         if !low.isEmpty {
-            observations.append("\(low.map { $0 == "REM" ? "REM" : $0.lowercased() }.joined(separator: " and ").capitalizedFirst) sleep \(low.count > 1 ? "are" : "is") below the share of the night Garmin calls optimal.")
+            observations.append("\(low.map { $0 == "REM" ? "REM" : $0.lowercased() }.joined(separator: " and ").capitalizedFirst) sleep \(low.count > 1 ? "are" : "is") below the share of the night considered optimal.")
         }
         let lowStage = low.contains("REM") ? "REM" : low.first
 

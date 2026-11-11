@@ -84,7 +84,7 @@ struct ContentView: View {
                             Label("Sync", systemImage: "arrow.triangle.2.circlepath")
                         }
                         .disabled(sync.isRunning)
-                        .help("Get the latest from Garmin")
+                        .help("Get your latest data")
                     }
                 }
             }

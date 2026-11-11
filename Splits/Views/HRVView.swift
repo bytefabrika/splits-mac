@@ -89,7 +89,7 @@ struct HRVView: View {
         let last = model.mornings.last!
         let status = days.last { $0.hrvLastNight != nil }?.hrvStatus.map { Format.title($0.lowercased()) }
         var metrics = [Metric(label: "Last night", symbol: "moon.stars", tint: .teal, value: "\(Int(last.ms)) ms",
-                              note: status.map { "Garmin: \($0)" })]
+                              note: status.map { "status: \($0.lowercased())" })]
         if let latest {
             let range = latest.lowMs.flatMap { low in latest.highMs.map { "normal \(Int(low.rounded()))–\(Int($0.rounded())) ms" } }
             metrics.append(Metric(label: "7-day average", symbol: "chart.line.uptrend.xyaxis", tint: .teal,

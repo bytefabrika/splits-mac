@@ -173,8 +173,8 @@ struct BatteryWidget: Widget {
         StaticConfiguration(kind: "battery", provider: Provider()) { entry in
             BatteryView(entry: entry).containerBackground(.fill.tertiary, for: .widget)
         }
-        .configurationDisplayName("Body Battery")
-        .description("Your Body Battery now, and through the day.")
+        .configurationDisplayName("Energy")
+        .description("Your energy level now, and through the day.")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
 }
@@ -186,7 +186,7 @@ struct BatteryView: View {
     var body: some View {
         if let s = entry.snapshot, let bb = s.bodyBattery {
             VStack(alignment: .leading, spacing: 4) {
-                Label("Body Battery", systemImage: "bolt.heart.fill")
+                Label("Energy", systemImage: "bolt.heart.fill")
                     .font(.caption.weight(.bold)).foregroundStyle(batteryBlue)
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text("\(bb)").font(.system(size: 40, weight: .heavy, design: .rounded)).monospacedDigit()
@@ -206,7 +206,7 @@ struct BatteryView: View {
                 Updated(date: s.updated)
             }
         } else {
-            Empty(message: entry.snapshot == nil ? "Open Splits to sync" : "No Body Battery from your watch yet today")
+            Empty(message: entry.snapshot == nil ? "Open Splits to sync" : "No energy level from your watch yet today")
         }
     }
 }

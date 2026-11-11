@@ -1,8 +1,8 @@
 # Splits
 
-Your Garmin data, on your Mac. Activities, sleep, HRV, Body Battery and more, in a fast native app.
+Your watch's data, on your Mac. Activities, sleep, HRV, energy and more, in a fast native app. Works with Garmin Connect.
 
-Splits uses Garmin's Connect Personal API with **your own** Personal API key. The key is kept in your Mac's keychain and only ever sent to Garmin; everything Splits downloads stays on your Mac. There's no account and no server.
+Splits uses the Garmin Connect Personal API with **your own** Personal API key, for your own personal use. The key is kept in your Mac's keychain and only sent to that API; everything Splits downloads stays on your Mac. There's no account, no server and no tracking.
 
 ## Get started
 1. In Garmin Connect on the web, open **Settings → Personal API Key**, create a key and copy it.
@@ -21,4 +21,7 @@ open Splits.xcodeproj
 
 Both are bundled, so finding where an activity was never leaves your Mac.
 
-Not affiliated with Garmin. Garmin and Garmin Connect are trademarks of Garmin Ltd.
+## Legal
+Splits is an independent app. It is not made, sponsored, endorsed or approved by Garmin Ltd. or its subsidiaries. Garmin and Garmin Connect are trademarks of Garmin Ltd. or its subsidiaries, named only to say which service Splits works with.
+
+Splits is not a medical device and its numbers and AI-written notes are not medical advice. It is provided as is, without warranty, under the [MIT License](LICENSE). Full notices: [LEGAL.md](LEGAL.md).

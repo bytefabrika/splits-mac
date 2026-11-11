@@ -10,7 +10,7 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            Section("Garmin Personal API key") {
+            Section("Personal API key") {
                 LabeledContent("Status", value: Keychain.readKey() == nil ? "Not set" : "Saved in your keychain")
                 SecureField("Replace with a new key", text: $newKey)
                 HStack {
@@ -31,14 +31,20 @@ struct SettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
 
+            Section("About") {
+                LabeledContent("Version", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "–")
+                Text("An independent app by Bytefabrika. Works with Garmin Connect; not affiliated with or endorsed by Garmin. Not a medical device. See Legal for the full notices.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
             Section("Your data") {
-                Text("Everything Splits downloads stays on this Mac. Removing it deletes the key from your keychain and all downloaded data. Your Garmin account isn't touched.")
+                Text("Everything Splits downloads stays on this Mac. Removing it deletes the key from your keychain and all downloaded data. Your online account isn't touched.")
                     .font(.caption).foregroundStyle(.secondary)
                 Button("Remove Key and Data…", role: .destructive) { confirmRemove = true }
             }
         }
         .formStyle(.grouped)
-        .frame(width: 480, height: 580)  // tall enough that "Remove Key and Data…" isn't cut off
+        .frame(width: 480, height: 680)  // tall enough that "Remove Key and Data…" isn't cut off
         .confirmationDialog("Remove your key and everything Splits downloaded?", isPresented: $confirmRemove) {
             Button("Remove", role: .destructive) {
                 Keychain.deleteKey()

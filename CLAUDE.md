@@ -5,7 +5,8 @@ A native macOS app that shows your own Garmin Connect data (activities, sleep, H
 ## Why it's built this way (Garmin's terms)
 - Personal API Supplemental Terms §1: a key "may be used only by you in connection with applications, services, or tools that you develop or operate for your own use" and must not be shared with any third party. FAQ: "not intended for commercial applications serving multiple end users."
 - So: each user runs Splits on their own Mac with their own key. The key lives in the login keychain (`Keychain.swift`) and is only ever sent to Garmin. There's no Splits server. Keep it free; don't add anything that sends data or keys elsewhere.
-- "Garmin" must not be in the product name (trademark). "Works with Garmin Connect" in descriptions is fine.
+- "Garmin" must not be in the product name (trademark). In the app, say "Garmin" / "Garmin Connect" only where it's needed to say what Splits works with (getting the key, the compatibility line, Legal); elsewhere "your watch", "your data", "the server". Garmin's feature names aren't used as labels: Body Battery is shown as "Energy", Training Effect as "Effect on fitness". The AI prompts and facts follow the same rule, since the model repeats what it's given.
+- Legal notices (independent app and trademarks, not medical advice, AI can be wrong, your key and Garmin's terms, privacy, no warranty, data credits) live in `Views/LegalView.swift` (Settings › Legal, linked from the welcome screen) and `LEGAL.md`, which is generated from the same text: change both together. AI cards say "Written by on-device AI, can be wrong".
 
 ## API (see github.com/garmin/connect-personal-api-python, the only readable endpoint list; the Swagger page is JS-rendered)
 - Base `https://personal.connectapi.garmin.com`. `POST /personalapitoken-service/personal-api/personal-api-key/token` with `Authorization: ApiKey <key>` returns the bearer token **as plain text**; valid 24 h, no refresh token.

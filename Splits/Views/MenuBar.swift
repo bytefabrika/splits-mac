@@ -104,7 +104,7 @@ struct MenuBarPanel: View {
                 }
                 Button { Task { await live.refresh(force: true) } } label: { Image(systemName: "arrow.clockwise") }
                     .buttonStyle(.borderless)
-                    .help("Refresh from Garmin")
+                    .help("Refresh")
             }
 
             battery
@@ -136,7 +136,7 @@ struct MenuBarPanel: View {
     private var battery: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
-                Label("Body Battery", systemImage: "bolt.heart.fill").font(.subheadline.weight(.semibold)).foregroundStyle(.blue)
+                Label("Energy", systemImage: "bolt.heart.fill").font(.subheadline.weight(.semibold)).foregroundStyle(.blue)
                 Spacer()
                 Text(live.currentBattery.map(String.init) ?? "–").font(.system(size: 26, weight: .bold, design: .rounded))
             }

@@ -117,10 +117,10 @@ struct SleepView: View {
         let balance = SleepAnalysis.balance(nights.filter { $0.date > start })
         let owed = SleepAnalysis.debt(nights)
         let subtitle = owed.map { $0 < 30 * 60 ? "No sleep debt over the last 14 nights" : "\(Format.hoursMinutes(Int($0))) short over the last 14 nights" }
-            ?? "Against the sleep need Garmin works out each night"
+            ?? "Against the sleep need your watch works out each night"
         return Panel(title: "Sleep debt", subtitle: subtitle) {
             if balance.isEmpty {
-                Text("Garmin hasn't given a sleep need for these nights.").foregroundStyle(.secondary)
+                Text("Your watch hasn't given a sleep need for these nights.").foregroundStyle(.secondary)
             } else {
                 Chart(balance, id: \.date) { b in
                     BarMark(x: .value("Night", b.date, unit: .day), y: .value("Hours", b.seconds / 3600))
@@ -240,7 +240,7 @@ struct SleepView: View {
 
     private func stages(_ nights: [SleepAnalysis.Night]) -> some View {
         let shares = SleepAnalysis.stageShares(nights)
-        return Panel(title: "Sleep stages", subtitle: "Your average share of the night against Garmin's optimal range") {
+        return Panel(title: "Sleep stages", subtitle: "Your average share of the night against the optimal range") {
             if shares.isEmpty {
                 Text("No stages for these nights.").foregroundStyle(.secondary)
             } else {
@@ -278,7 +278,7 @@ struct SleepView: View {
 
     private var method: some View {
         Text("""
-        How it's worked out: sleep need is Garmin's, worked out each night from your usual need, training and HRV. Sleep debt adds up the last 14 nights \
+        How it's worked out: sleep need and the optimal stage ranges come from your watch's sleep data, the need worked out each night from your usual need, training and HRV. Sleep debt adds up the last 14 nights \
         (two weeks of short nights add up, Van Dongen et al. 2003). Regularity is the standard deviation of bedtime and wake-up. Social jetlag is mid-sleep \
         on weekends minus weekdays (Wittmann et al. 2006); chronotype is weekend mid-sleep corrected for catching up on sleep (Roenneberg et al. 2004). \
         Not medical advice.

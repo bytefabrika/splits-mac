@@ -10,9 +10,9 @@ enum GarminError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .noKey: "Add your Personal API key first."
-        case .badKey: "Garmin didn't accept the key. It may have expired or been deleted. Create a new one in Garmin Connect."
-        case .rateLimited: "Garmin asked us to slow down. Try again in a few minutes."
-        case .http(let code, let body): "Garmin answered \(code): \(body.prefix(200))"
+        case .badKey: "The key wasn't accepted. It may have expired or been deleted. Create a new one in Garmin Connect."
+        case .rateLimited: "The server asked us to slow down. Try again in a few minutes."
+        case .http(let code, let body): "The server answered \(code): \(body.prefix(200))"
         case .unexpected(let path, let detail): "Unexpected answer from \(path): \(detail)"
         }
     }

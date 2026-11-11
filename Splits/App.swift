@@ -83,8 +83,14 @@ struct SplitsApp: App {
         .menuBarExtraStyle(.window)
 
         Settings {
-            SettingsView()
-                .modelContainer(container)
+            TabView {
+                SettingsView()
+                    .tabItem { Label("General", systemImage: "gearshape") }
+                LegalView()
+                    .frame(width: 480, height: 680)
+                    .tabItem { Label("Legal", systemImage: "doc.text") }
+            }
+            .modelContainer(container)
         }
     }
 }

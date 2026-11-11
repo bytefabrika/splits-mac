@@ -215,7 +215,7 @@ struct TrendsView: View {
     }
 
     private func loadChart(_ load: [WeekSport]) -> some View {
-            ChartCard(title: "Training load", subtitle: "Garmin's load, per week") {
+            ChartCard(title: "Training load", subtitle: "Training load from your watch, per week") {
                 Chart(load) { week in
                     BarMark(x: .value("Week", week.start, unit: .weekOfYear), y: .value("Load", week.value))
                         .foregroundStyle(.teal.gradient)
