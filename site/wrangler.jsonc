@@ -1,0 +1,17 @@
+// splits.bytefabrika.io: a static page in public/, served by Cloudflare. No code runs, no cookies, no analytics.
+// Deploy with: npx wrangler deploy --config site/wrangler.jsonc
+// Local preview: npx wrangler dev --config site/wrangler.jsonc
+{
+  "name": "splits-site",
+  "compatibility_date": "2026-10-19",
+  "assets": {
+    "directory": "public",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page"
+  },
+  // Only the custom domain; no *.workers.dev address.
+  "workers_dev": false,
+  "routes": [
+    { "pattern": "splits.bytefabrika.io", "custom_domain": true }
+  ]
+}

@@ -2,6 +2,8 @@
 
 Your watch's data, on your Mac. Activities, sleep, HRV, energy and more, in a fast native app. Works with Garmin Connect.
 
+**[splits.bytefabrika.io](https://splits.bytefabrika.io)** · [Download](https://github.com/bytefabrika/splits-mac/releases/latest/download/Splits.zip)
+
 Splits uses the Garmin Connect Personal API with **your own** Personal API key, for your own personal use. The key is kept in your Mac's keychain and only sent to that API; everything Splits downloads stays on your Mac. There's no account, no server and no tracking.
 
 ![Today: the morning briefing, sleep, HRV, energy and steps](docs/screenshots/today.png)
@@ -21,7 +23,7 @@ Splits uses the Garmin Connect Personal API with **your own** Personal API key, 
 | ![Trends: a year of days](docs/screenshots/trends.png) | ![Explorer: countries and cities](docs/screenshots/explorer.png) |
 
 ## Get started
-1. Download the latest `Splits-<version>.zip` from [Releases](https://github.com/bytefabrika/splits-mac/releases/latest), unzip it and move Splits to Applications.
+1. [Download Splits](https://github.com/bytefabrika/splits-mac/releases/latest/download/Splits.zip), unzip it and move Splits to Applications.
 2. In Garmin Connect on the web, open **Settings → Personal API Key**, create a key and copy it.
 3. Open Splits and paste the key.
 
