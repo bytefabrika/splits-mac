@@ -137,3 +137,32 @@ final class HealthTests: XCTestCase {
         XCTAssertNotNil(ImageRenderer(content: view).nsImage)
     }
 }
+
+final class RepTests: XCTestCase {
+    private func lap(_ metres: Double, _ paceSeconds: Double) -> Lap {
+        var l = Lap()
+        l.distance = metres
+        l.moving = metres / 1000 * paceSeconds
+        return l
+    }
+
+    func testTempoRepeatsAreFound() {
+        // Warm-up, 3 km rep, 500 m jog, 3 km rep, cool-down: the real tempo session that read as "uneven".
+        let laps = [lap(1000, 395), lap(1000, 324), lap(1000, 328), lap(1000, 330), lap(500, 422),
+                    lap(1000, 349), lap(1000, 371), lap(1000, 347), lap(500, 360), lap(20, 283)]
+        let reps = try! XCTUnwrap(Coach.reps(laps))
+        XCTAssertEqual(reps.count, 2)
+        XCTAssertEqual(reps[0].distance, 3000)
+        XCTAssertEqual(reps[0].seconds / 3, 327.3, accuracy: 0.5)
+    }
+
+    func testSteadyRunAndSlowStartAreNotReps() {
+        XCTAssertNil(Coach.reps((0..<8).map { i in lap(1000, 330 + Double(i % 3) * 6) }))
+        XCTAssertNil(Coach.reps([lap(1000, 400)] + (0..<7).map { _ in lap(1000, 330) }))
+    }
+
+    func testIntervalsWithJogs() {
+        let laps = [lap(2000, 360)] + (0..<5).flatMap { _ in [lap(800, 250), lap(400, 420)] } + [lap(1500, 370)]
+        XCTAssertEqual(Coach.reps(laps)?.count, 5)
+    }
+}

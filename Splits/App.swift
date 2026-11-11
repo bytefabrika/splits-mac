@@ -128,15 +128,25 @@ enum DebugSync {
         Task { @MainActor in
             print("model status: \(Coach.status)")
             // `COACH_TYPE=paddelball` picks the newest of that type; otherwise the newest over 1 km.
+            // `COACH_NAME=Repeat` picks the newest whose name contains that.
             let type = ProcessInfo.processInfo.environment["COACH_TYPE"]
+            let name = ProcessInfo.processInfo.environment["COACH_NAME"]
             let all = (try? container.mainContext.fetch(FetchDescriptor<Activity>(sortBy: [SortDescriptor(\.start, order: .reverse)]))) ?? []
-            guard let activity = all.first(where: { a in type.map { a.typeKey == $0 } ?? (a.distance > 1000) }) else { print("no such activity"); exit(0) }
+            guard let activity = all.first(where: { a in
+                if let name { return a.name.localizedCaseInsensitiveContains(name) }
+                return type.map { a.typeKey == $0 } ?? (a.distance > 1000)
+            }) else { print("no such activity"); exit(0) }
+            print("\(activity.name) \(activity.start)")
             var recentQuery = FetchDescriptor<Activity>(sortBy: [SortDescriptor(\.start, order: .reverse)])
             recentQuery.fetchLimit = 60
             let recent = (try? container.mainContext.fetch(recentQuery)) ?? []
             let date = GarminDate.string(activity.start)
             let morning = (try? container.mainContext.fetch(FetchDescriptor<Day>(predicate: #Predicate { $0.date == date })))?.first
             let analysis = (try? await Tracks.shared.track(for: activity.garminId)).map { TrackAnalysis($0) }
+            for lap in analysis?.laps ?? [] {
+                let pace = (lap.moving ?? lap.elapsed ?? 0) / max(lap.distance ?? 1, 1) * 1000
+                print(String(format: "lap %6.0f m  %5.0f s  %d:%02d /km  HR %.0f", lap.distance ?? 0, lap.moving ?? lap.elapsed ?? 0, Int(pace) / 60, Int(pace) % 60, lap.averageHR ?? 0))
+            }
             let facts = Coach.facts(activity: activity, analysis: analysis, recent: recent, morning: morning, format: Format(units: "metric"))
             print("---- facts (\(facts.count) chars) ----\n\(facts)\n---- take ----")
             let started = Date()

@@ -104,6 +104,8 @@ struct TrackAnalysis {
     let route: [CLLocationCoordinate2D]
     let splits: [Split]
     let bests: [Best]
+    /// The watch's own laps: auto laps every km, or the parts of a structured workout.
+    let laps: [Lap]
 
     /// A gap between records longer than this is a pause.
     static let pauseGap: TimeInterval = 15
@@ -111,6 +113,7 @@ struct TrackAnalysis {
     /// `splitLength`: 1000 m, or 1609.344 m for miles.
     init(_ track: Track, splitLength: Double = 1000, maxSamples: Int = 240) {
         let points = track.points
+        laps = track.laps
         let start = points.first?.time ?? Date()
         // Timer time: the watch stops recording while paused (lights, a coffee), so a long gap between two
         // records is a pause and doesn't count. Splits and best efforts use this, like the watch's own laps.

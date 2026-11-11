@@ -125,22 +125,69 @@ enum Coach {
 
     /// What the numbers mean, worked out here rather than by the model, which reads numbers unreliably
     /// (it called zone 4 at 0% "most time in zones 1 to 4"). The model repeats these in its own words.
+    /// The reps of a structured session, from the watch's laps: laps much slower than the fast ones (warm-up,
+    /// recoveries, cool-down) split the rest into blocks, and each block is a rep. Nil for a steady run.
+    static func reps(_ laps: [Lap]) -> [(distance: Double, seconds: Double)]? {
+        let usable = laps.compactMap { lap -> (distance: Double, seconds: Double)? in
+            guard let d = lap.distance, d >= 200, let t = lap.moving ?? lap.elapsed, t > 0 else { return nil }
+            return (d, t)
+        }
+        guard usable.count >= 4 else { return nil }
+        let paces = usable.map { $0.seconds / $0.distance * 1000 }
+        let sorted = paces.sorted()
+        let quick = sorted[sorted.count / 4]
+        var blocks: [(distance: Double, seconds: Double)] = []
+        var current: (distance: Double, seconds: Double)?
+        var sawEasyBetween = false
+        for (lap, pace) in zip(usable, paces) {
+            if pace > quick + 45 {
+                if let c = current { blocks.append(c); current = nil }
+                if !blocks.isEmpty { sawEasyBetween = true }
+            } else {
+                current = (distance: (current?.distance ?? 0) + lap.distance, seconds: (current?.seconds ?? 0) + lap.seconds)
+            }
+        }
+        if let c = current { blocks.append(c) }
+        let reps = blocks.filter { $0.distance >= 400 }
+        return reps.count >= 2 && sawEasyBetween ? reps : nil
+    }
+
     static func judgements(activity: Activity, analysis: TrackAnalysis?, recent: [Activity], format: Format) -> [String] {
         var out: [String] = []
         let sport = activity.sport
         let paceLike = [.run, .walk, .hike].contains(sport)
 
-        // Pacing, from the full splits (the last, shorter one left out).
-        if activity.hasDistance, let splits = analysis?.splits.filter({ $0.length > 900 }), splits.count >= 4 {
+        // Pacing. A structured session (reps with easier running between) is judged on its reps, not its
+        // splits: there the swings are the plan.
+        if activity.hasDistance, paceLike, let analysis, let reps = reps(analysis.laps), reps.count >= 2 {
+            let paces = reps.map { $0.seconds / $0.distance * 1000 }
+            let listed = paces.map { format.pace(secondsPerKm: $0) }.joined(separator: ", ")
+            let change = Int((paces.last! - paces.first!).rounded())
+            let spread = Int(((paces.max() ?? 0) - (paces.min() ?? 0)).rounded())
+            var line = "Pacing judgement: a structured workout, \(reps.count) reps with easier running before, between or after them, so the changes in pace were planned. The reps averaged \(listed)"
+            if spread <= 8 {
+                line += ", evenly matched"
+            } else if change > 8 {
+                line += ": the last rep was \(change) s/km slower than the first, so it faded"
+            } else if change < -8 {
+                line += ": the last rep was \(-change) s/km faster than the first, so it built up"
+            } else {
+                line += ", a bit uneven in the middle"
+            }
+            out.append(line + ".")
+        } else if activity.hasDistance, let splits = analysis?.splits.filter({ $0.length > 900 }), splits.count >= 4 {
             let paces = splits.map { $0.seconds / $0.length * 1000 }
             let half = paces.count / 2
             let first = paces.prefix(half).reduce(0, +) / Double(half)
             let second = paces.suffix(paces.count - half).reduce(0, +) / Double(paces.count - half)
             let spread = (paces.max() ?? 0) - (paces.min() ?? 0)
+            let restSpread = (paces.dropFirst().max() ?? 0) - (paces.dropFirst().min() ?? 0)
             let diff = Int((second - first).rounded())
             var line = "Pacing judgement: "
-            if spread > 45 {
-                line += "uneven, with big swings between splits (\(Int(spread)) s/km between fastest and slowest), as in intervals, hills or stops"
+            if spread > 45 && restSpread <= 30 {
+                line += "an easy first km to warm up, then steady"
+            } else if spread > 45 {
+                line += "uneven, with big swings between splits, as with hills, stops or changes of plan"
             } else if diff <= -8 {
                 line += "a negative split: the second half was \(-diff) s/km faster than the first, which is well paced"
             } else if diff >= 12 {
@@ -178,9 +225,12 @@ enum Coach {
             let total = max(activity.hrZones.reduce(0, +), 1)
             let pct = activity.hrZones.map { Int(($0 / total * 100).rounded()) }
             let easy = pct[0] + pct[1], middle = pct[2], hard = pct[3] + pct[4]
+            // The two zones it spent most time in, in order: "zones 3 and 4".
+            let top = pct.indices.sorted { pct[$0] > pct[$1] }.prefix(2).sorted().map { $0 + 1 }
+            let most = "mostly zones \(top[0]) and \(top[1]) (\(pct[top[0] - 1] + pct[top[1] - 1])% of the time)"
             let kind = hard >= 25 ? "a hard session, \(hard)% in zones 4 and 5"
                 : easy >= 70 ? "an easy aerobic session, \(easy)% in zones 1 and 2"
-                : "a moderate, steady effort, mostly zones 2 and 3"
+                : "a moderate effort, \(most)"
             out.append("Heart rate zones judgement: \(kind).")
         }
 
