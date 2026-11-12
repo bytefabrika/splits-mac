@@ -38,7 +38,15 @@ struct Track {
 /// fields (skipped). Reads record (20) and lap (19) messages, the rest is ignored.
 /// Spec: FIT protocol, garmin.com/fit. Invalid values (all bits set for the type) become nil.
 enum FIT {
-    enum Failure: Error { case notFIT, truncated }
+    enum Failure: LocalizedError {
+        case notFIT, truncated
+        var errorDescription: String? {
+            switch self {
+            case .notFIT: "The activity file isn't a FIT file."
+            case .truncated: "The activity file is cut short."
+            }
+        }
+    }
 
     private struct FieldDef { let number: UInt8; let size: Int; let baseType: UInt8 }
     private struct Definition { let global: UInt16; let bigEndian: Bool; let fields: [FieldDef]; let devSize: Int }

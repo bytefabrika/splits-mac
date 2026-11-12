@@ -20,22 +20,24 @@ actor Tracks {
     /// finder, which goes through every run once and only needs the best efforts).
     func track(for id: Int64, keep: Bool = true) async throws -> Track {
         if let cached = memory[id] { return cached }
+        // The saved file keeps its old name whatever its format (FIT, TCX or GPX); the contents say which.
         let file = folder.appendingPathComponent("\(id).fit")
-        let fit: Data
         if let saved = try? Data(contentsOf: file) {
-            fit = saved
-        } else {
-            let download = try await client.activityFile(id)
-            fit = download.prefix(4) == Data([0x50, 0x4B, 0x03, 0x04])
-                ? try Zip.entries(download).first { $0.name.lowercased().hasSuffix(".fit") }?.data ?? Data()
-                : download
-            if keep {
-                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-                try fit.write(to: file, options: .atomic)
+            if let track = try? ActivityFile.decode(saved) {
+                if keep { memory[id] = track }
+                return track
             }
+            // 0.1 saved an empty file when the download had no FIT in it. Drop it and download again.
+            try? FileManager.default.removeItem(at: file)
         }
-        let track = try FIT.decode(fit)
-        if keep { memory[id] = track }
+        let data = try ActivityFile.unpack(try await client.activityFile(id))
+        let track = try ActivityFile.decode(data)
+        // Only a file that could be read is kept, so a bad download is tried again next time.
+        if keep {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try data.write(to: file, options: .atomic)
+            memory[id] = track
+        }
         return track
     }
 

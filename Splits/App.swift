@@ -113,10 +113,8 @@ enum DebugSync {
         let input = FileHandle.standardInput.readDataToEndOfFile()
         let started = Date()
         do {
-            let fitData = input.prefix(4) == Data([0x50, 0x4B, 0x03, 0x04])
-                ? try Zip.entries(input).first { $0.name.lowercased().hasSuffix(".fit") }?.data ?? Data()
-                : input
-            let track = try FIT.decode(fitData)
+            let fitData = try ActivityFile.unpack(input)
+            let track = try ActivityFile.decode(fitData)
             let p = track.points
             print("decoded \(fitData.count) bytes in \(Int(Date().timeIntervalSince(started) * 1000)) ms")
             print("points \(p.count), with GPS \(p.filter { $0.coordinate != nil }.count), HR \(p.filter { $0.heartRate != nil }.count), altitude \(p.filter { $0.altitude != nil }.count), power \(p.filter { $0.power != nil }.count), cadence \(p.filter { $0.cadence != nil }.count)")
@@ -175,8 +173,8 @@ enum DebugSync {
     static func map() {
         let input = FileHandle.standardInput.readDataToEndOfFile()
         Task { @MainActor in
-            let fitData = (try? Zip.entries(input).first { $0.name.lowercased().hasSuffix(".fit") }?.data) ?? input
-            guard let track = try? FIT.decode(fitData) else { FileHandle.standardError.write(Data("bad file\n".utf8)); exit(1) }
+            let fitData = (try? ActivityFile.unpack(input)) ?? input
+            guard let track = try? ActivityFile.decode(fitData) else { FileHandle.standardError.write(Data("bad file\n".utf8)); exit(1) }
             let analysis = TrackAnalysis(track)
             let size = CGSize(width: 900, height: 380)
             guard let rect = RouteSnapshot.fittedRect(analysis.route, size: size) else { exit(1) }
@@ -358,8 +356,8 @@ enum DebugSync {
     static func card(container: ModelContainer) {
         let input = FileHandle.standardInput.readDataToEndOfFile()
         Task { @MainActor in
-            let fitData = (try? Zip.entries(input).first { $0.name.lowercased().hasSuffix(".fit") }?.data) ?? input
-            let route = (try? FIT.decode(fitData)).map { TrackAnalysis($0).route } ?? []
+            let fitData = (try? ActivityFile.unpack(input)) ?? input
+            let route = (try? ActivityFile.decode(fitData)).map { TrackAnalysis($0).route } ?? []
             var latest = FetchDescriptor<Activity>(predicate: #Predicate { $0.distance > 20_000 }, sortBy: [SortDescriptor(\.start, order: .reverse)])
             latest.fetchLimit = 1
             guard let activity = try? container.mainContext.fetch(latest).first,

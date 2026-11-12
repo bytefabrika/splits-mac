@@ -108,6 +108,8 @@ struct ActivityPage: View {
             let track = try await Tracks.shared.track(for: id)
             let length = format.imperial ? 1609.344 : 1000
             analysis = await Task.detached { TrackAnalysis(track, splitLength: length) }.value
+        } catch ActivityFile.Failure.noFile {
+            loadError = ActivityFile.Failure.noFile.localizedDescription
         } catch {
             loadError = "Couldn't load the activity file: \(error.localizedDescription)"
         }

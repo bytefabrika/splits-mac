@@ -206,11 +206,14 @@ struct MenuBarPanel: View {
                 }
                 .frame(height: 10)
                 .clipShape(Capsule())
-                HStack(spacing: 10) {
+                // Three to a row: five labels with times don't fit on one line and got cut off.
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8, alignment: .leading), count: 3),
+                          alignment: .leading, spacing: 4) {
                     ForEach(parts.filter { $0.1 > 0 }, id: \.0) { part in
                         HStack(spacing: 4) {
                             Circle().fill(part.2).frame(width: 6, height: 6)
                             Text("\(part.0) \(Format.hoursMinutes(Int(part.1 / 1000)))").font(.caption2).foregroundStyle(.secondary)
+                                .lineLimit(1).minimumScaleFactor(0.85)
                         }
                     }
                 }
