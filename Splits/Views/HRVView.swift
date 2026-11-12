@@ -51,7 +51,7 @@ struct HRVView: View {
                         method
                     } else if model != nil {
                         ContentUnavailableView("No HRV yet", systemImage: "waveform.path.ecg",
-                                               description: Text("Wear your watch to bed: HRV is measured while you sleep."))
+                                               description: Text("HRV is measured while you sleep, on watches that support it. Wear yours to bed and it shows up here."))
                     }
                 }
                 .padding(24)

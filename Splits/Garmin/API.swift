@@ -151,7 +151,7 @@ struct HRVRangeDTO: Decodable {
         let baseline: Baseline?
         let status: String?
     }
-    let hrvSummaries: [Summary]
+    let hrvSummaries: [Summary]?
 }
 
 /// One night's HRV: the summary plus a reading every 5 minutes while asleep (`/hrv-service/hrv/{date}`).

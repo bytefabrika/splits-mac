@@ -76,6 +76,7 @@ struct SettingsView: View {
                 UserDefaults.standard.removeObject(forKey: "welcomed")
                 Task { await Tracks.shared.removeAll(); await RecordStore.shared.removeAll() }
                 UserDefaults.standard.removeObject(forKey: "coordinatesBackfilled")
+                UserDefaults.standard.removeObject(forKey: Sync.reachedBackKey)
                 NotificationCenter.default.post(name: .splitsKeyRemoved, object: nil)
             }
         }

@@ -29,6 +29,7 @@ actor GarminClient {
 
     private let key: () -> String?
     private let session: URLSession
+    private let gap: TimeInterval
     private var token: (value: String, expires: Date)?
     private var lastRequest = Date.distantPast
 
@@ -41,9 +42,10 @@ actor GarminClient {
         return GarminClient()
     }()
 
-    init(key: @escaping () -> String? = Keychain.readKey, session: URLSession = .shared) {
+    init(key: @escaping () -> String? = Keychain.readKey, session: URLSession = .shared, gap: TimeInterval = GarminClient.gap) {
         self.key = key
         self.session = session
+        self.gap = gap
     }
 
     /// Exchanges the key for a bearer token. Garmin answers with the token as plain text.
@@ -123,7 +125,7 @@ actor GarminClient {
     }
 
     private func send(_ request: URLRequest) async throws -> (Data, URLResponse) {
-        let wait = Self.gap - Date().timeIntervalSince(lastRequest)
+        let wait = gap - Date().timeIntervalSince(lastRequest)
         if wait > 0 { try await Task.sleep(for: .seconds(wait)) }
         lastRequest = Date()
         return try await session.data(for: request)
