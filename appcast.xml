@@ -5,6 +5,15 @@
     <description>New versions of Splits.</description>
     <language>en</language>
     <item>
+      <title>Version 0.1.1</title>
+      <pubDate>Thu, 12 Nov 2026 10:11:01 -0000</pubDate>
+      <sparkle:version>2</sparkle:version>
+      <sparkle:shortVersionString>0.1.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>https://github.com/bytefabrika/splits-mac/releases/tag/v0.1.1</sparkle:releaseNotesLink>
+      <enclosure url="https://github.com/bytefabrika/splits-mac/releases/download/v0.1.1/Splits-0.1.1.zip" type="application/octet-stream" sparkle:edSignature="GuLSbFxFbyQ1NavNw9I3nE5LTLf3O7oZDxzwQcTw3q07gn7zdBD3MPEPcXwFBG5Pd/NuXZ5wFa7lvTGnDrfyBg==" length="6429138" />
+    </item>
+    <item>
       <title>Version 0.1</title>
       <pubDate>Wed, 11 Nov 2026 19:32:25 -0000</pubDate>
       <sparkle:version>1</sparkle:version>
